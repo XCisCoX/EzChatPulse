@@ -1,0 +1,24 @@
+# dependencies
+node_modules/
+
+# build output
+dist/
+web/dist/
+
+# runtime data (sqlite db, uploads)
+data/
+
+# certificates (self-signed, machine-local)
+certs/
+
+# env / secrets
+.env
+
+# logs
+*.log
+npm-debug.log*
+
+# os / editor
+.DS_Store
+.idea/
+.vscode/
