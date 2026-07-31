@@ -4,6 +4,7 @@ import multer from 'multer';
 import { WebSocketServer, WebSocket as RawWebSocket } from 'ws';
 import { openDb, setTestDb, type Db } from '../src/db.js';
 import { AppError } from '../src/errors.js';
+import { resetRateLimits } from '../src/rate-limit.js';
 import authRoutes from '../src/api/auth_routes.js';
 import userRoutes from '../src/api/user_routes.js';
 import chatRoutes from '../src/api/chat_routes.js';
@@ -23,6 +24,7 @@ export interface TestContext {
 export function createTestContext(): Promise<TestContext> {
   const db = openDb(':memory:');
   setTestDb(db);
+  resetRateLimits(); // fresh limiter state per test
 
   const app = express();
   app.use(express.json({ limit: '100kb' }));

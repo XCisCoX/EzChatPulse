@@ -444,6 +444,23 @@ export function mountChatPane(): void {
       const key = msg.tempId ? `t:${msg.tempId}` : `m:${msg.id}`;
       if (!rendered.has(key)) appendMessage(chat, msg);
     }
+    // reconcile existing nodes whose state changed (pending→acked, failed→resent, text update)
+    for (const el of messagesEl.querySelectorAll<HTMLElement>('.msg-row')) {
+      const key = el.dataset.key ?? '';
+      const storeMsg = chat.messages.find((m) => (m.tempId ? `t:${m.tempId}` : `m:${m.id}`) === key);
+      if (!storeMsg) continue;
+      const stateChanged =
+        el.classList.contains('pending') !== !!storeMsg.pending ||
+        el.classList.contains('failed') !== !!storeMsg.failed;
+      if (stateChanged) {
+        const fresh = makeMessageNode(chat, storeMsg);
+        const oldBubble = el.querySelector('.msg-bubble');
+        const newBubble = fresh.querySelector('.msg-bubble');
+        if (oldBubble && newBubble) el.replaceChild(newBubble, oldBubble);
+        el.classList.toggle('pending', !!storeMsg.pending);
+        el.classList.toggle('failed', !!storeMsg.failed);
+      }
+    }
     if (prevLast && prevLast !== chat.messages[chat.messages.length - 1]) {
       scrollToBottom();
     }

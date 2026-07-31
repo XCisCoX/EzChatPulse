@@ -3,6 +3,7 @@ import type { Request, Response, NextFunction } from 'express';
 import { getDb } from '../db.js';
 import { register, login, requireAuth, getUserById } from '../auth.js';
 import { isOnline } from '../ws/hub.js';
+import { rateLimit } from '../rate-limit.js';
 
 const router = Router();
 
@@ -13,7 +14,16 @@ function wrap(fn: (req: Request, res: Response) => Promise<void>) {
   };
 }
 
-router.post('/register', wrap(async (req, res) => {
+/** 10 attempts per minute per IP on auth endpoints (brute-force guard). */
+function authLimiter(req: Request, res: Response, next: NextFunction): void {
+  if (!rateLimit(`auth:${req.ip}`, 10, 60_000)) {
+    res.status(429).json({ error: 'Too many attempts — try again in a minute' });
+    return;
+  }
+  next();
+}
+
+router.post('/register', authLimiter, wrap(async (req, res) => {
   const { username, displayName, password } = req.body;
   if (!username || !displayName || !password) {
     res.status(400).json({ error: 'username, displayName, and password are required' });
@@ -23,7 +33,7 @@ router.post('/register', wrap(async (req, res) => {
   res.status(201).json(result);
 }));
 
-router.post('/login', wrap(async (req, res) => {
+router.post('/login', authLimiter, wrap(async (req, res) => {
   const { username, password } = req.body;
   if (!username || !password) {
     res.status(400).json({ error: 'username and password are required' });

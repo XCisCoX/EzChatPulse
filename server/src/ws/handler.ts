@@ -7,6 +7,7 @@ import { scheduleLastSeen, announceOnline, announceOffline } from '../presence.j
 import { handleTyping } from './typing.js';
 import { sendMessage, markRead } from '../services/messages.js';
 import { AppError } from '../errors.js';
+import { rateLimit } from '../rate-limit.js';
 
 const AUTH_TIMEOUT_MS = 5000;
 
@@ -22,6 +23,11 @@ export function handleConnection(raw: WebSocket): void {
   }, AUTH_TIMEOUT_MS);
 
   ws.on('message', (data) => {
+    const frameBytes = Buffer.isBuffer(data) ? data.length : typeof data === 'string' ? Buffer.byteLength(data) : 0;
+    if (frameBytes > config.maxWsFrameBytes) {
+      sendError(ws, 'TOO_LARGE', `Frame exceeds ${config.maxWsFrameBytes} bytes`);
+      return;
+    }
     let msg: Record<string, unknown>;
     try {
       msg = JSON.parse(String(data));
@@ -99,6 +105,11 @@ function handleSend(ws: ExtSocket, msg: Record<string, unknown>): void {
   const cid = Number(msg.cid);
   if (!Number.isInteger(cid)) {
     sendError(ws, 'BAD_REQUEST', 'cid must be an integer');
+    return;
+  }
+  // 30 messages/second per user — spam guard
+  if (!rateLimit(`send:${ws.userId}`, 30, 1000)) {
+    sendError(ws, 'RATE_LIMITED', 'Sending too fast — slow down');
     return;
   }
   try {

@@ -39,7 +39,10 @@ router.get('/chats/:id', requireAuth, wrap(async (req, res) => {
 router.post('/chats', requireAuth, wrap(async (req, res) => {
   const { type } = req.body;
   if (type === 'private') {
-    const chatId = findOrCreatePrivate(getDb(), req.userId, Number(req.body.userId));
+    const db = getDb();
+    const chatId = findOrCreatePrivate(db, req.userId, Number(req.body.userId));
+    // tell both members' devices about the chat (new or re-opened)
+    broadcastToChat(chatId, { t: 'chat.created', chat: chatSummary(db, chatId) });
     res.status(201).json({ chatId });
     return;
   }
