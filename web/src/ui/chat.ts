@@ -1,4 +1,4 @@
-import { api } from '../api';
+import { api, authedFileUrl } from '../api';
 import { store } from '../store';
 import { socket } from '../ws';
 import { loadMore } from '../actions';
@@ -100,6 +100,14 @@ export function mountChatPane(): void {
       img.alt = msg.file.name;
       img.loading = 'lazy';
       img.addEventListener('click', () => openLightbox(msg.file!.url, msg.file!.name));
+      void authedFileUrl(msg.file.url)
+        .then((u) => {
+          img.src = u;
+        })
+        .catch(() => {
+          img.classList.add('img-error');
+          img.title = 'Failed to load image';
+        });
       content.appendChild(img);
       if (msg.text) {
         const cap = document.createElement('div');
@@ -124,8 +132,19 @@ export function mountChatPane(): void {
       dl.className = 'file-dl';
       dl.textContent = '⬇';
       dl.href = msg.file.url;
-      dl.download = msg.file.name;
       dl.title = 'Download';
+      dl.addEventListener('click', async (e) => {
+        e.preventDefault();
+        try {
+          const u = await authedFileUrl(msg.file!.url);
+          const a = document.createElement('a');
+          a.href = u;
+          a.download = msg.file!.name;
+          a.click();
+        } catch {
+          toast('Download failed', 'error');
+        }
+      });
       row.append(meta, dl);
       content.appendChild(row);
       if (msg.text) {
@@ -545,13 +564,17 @@ function openMembersModal(chat: UIChat): void {
 }
 
 // ── lightbox ────────────────────────────────────────────────────────────
-function openLightbox(url: string, name: string): void {
+async function openLightbox(url: string, name: string): Promise<void> {
   const lb = $('#lightbox');
   lb.innerHTML = '';
   lb.classList.remove('hidden');
   const img = document.createElement('img');
-  img.src = url;
   img.alt = name;
+  try {
+    img.src = await authedFileUrl(url);
+  } catch {
+    img.alt = 'Failed to load image';
+  }
   const close = document.createElement('button');
   close.className = 'lb-close';
   close.textContent = '✕';
