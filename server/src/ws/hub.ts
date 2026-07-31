@@ -36,7 +36,11 @@ export function connectionCount(userId: number): number {
  * Returns the number of sockets that received it.
  */
 export function broadcastToChat(chatId: number, event: object, exceptUserId?: number): number {
-  const payload = JSON.stringify(event);
+  return broadcastPayloadToChat(chatId, JSON.stringify(event), exceptUserId);
+}
+
+/** Like broadcastToChat but takes an already-serialized payload (for multi-chat fan-out). */
+export function broadcastPayloadToChat(chatId: number, payload: string, exceptUserId?: number): number {
   const ids = memberIds(getDb(), chatId);
   let sent = 0;
   for (const userId of ids) {

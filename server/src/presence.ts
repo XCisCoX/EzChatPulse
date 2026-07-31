@@ -1,8 +1,27 @@
 import { getDb } from './db.js';
-import { isOnline } from './ws/hub.js';
+import { isOnline, broadcastPayloadToChat } from './ws/hub.js';
 
 const DEBOUNCE_MS = 15_000;
 const pendingFlush = new Map<number, ReturnType<typeof setTimeout>>();
+
+function chatIdsFor(userId: number): number[] {
+  const rows = getDb()
+    .prepare('SELECT chat_id FROM chat_members WHERE user_id = ?')
+    .all(userId) as Array<{ chat_id: number }>;
+  return rows.map((r) => r.chat_id);
+}
+
+/** Broadcast {t:'presence', online:true} to everyone sharing a chat with userId. */
+export function announceOnline(userId: number): void {
+  const payload = JSON.stringify({ t: 'presence', userId, online: true });
+  for (const chatId of chatIdsFor(userId)) broadcastPayloadToChat(chatId, payload);
+}
+
+/** Broadcast {t:'presence', online:false, lastSeenAt} to everyone sharing a chat with userId. */
+export function announceOffline(userId: number): void {
+  const payload = JSON.stringify({ t: 'presence', userId, online: false, lastSeenAt: Date.now() });
+  for (const chatId of chatIdsFor(userId)) broadcastPayloadToChat(chatId, payload);
+}
 
 function flushLastSeen(userId: number): void {
   const db = getDb();

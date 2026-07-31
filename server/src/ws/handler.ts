@@ -3,7 +3,8 @@ import jwt from 'jsonwebtoken';
 import { config } from '../config.js';
 import { getDb } from '../db.js';
 import { register, unregister, isOnline, broadcastToChat } from './hub.js';
-import { scheduleLastSeen } from '../presence.js';
+import { scheduleLastSeen, announceOnline, announceOffline } from '../presence.js';
+import { handleTyping } from './typing.js';
 import { sendMessage, markRead } from '../services/messages.js';
 import { AppError } from '../errors.js';
 
@@ -40,6 +41,10 @@ export function handleConnection(raw: WebSocket): void {
         ws.userId = sub;
         register(ws.userId, ws);
 
+        // Presence: clear stale last_seen, tell shared chats we're online
+        getDb().prepare('UPDATE users SET last_seen_at = NULL WHERE id = ?').run(ws.userId);
+        announceOnline(ws.userId);
+
         ws.send(JSON.stringify({ t: 'ready', userId: ws.userId }));
       } catch {
         sendError(ws, 'AUTH_FAILED', 'Invalid or expired token');
@@ -60,6 +65,15 @@ export function handleConnection(raw: WebSocket): void {
       case 'read':
         handleRead(ws, msg);
         break;
+      case 'typing': {
+        const cid = Number(msg.cid);
+        if (!Number.isInteger(cid)) {
+          sendError(ws, 'BAD_REQUEST', 'cid must be an integer');
+          return;
+        }
+        handleTyping(ws.userId!, cid);
+        break;
+      }
       default:
         sendError(ws, 'UNKNOWN_TYPE', `Unknown message type: ${msg.t}`);
     }
@@ -71,6 +85,7 @@ export function handleConnection(raw: WebSocket): void {
       unregister(ws.userId, ws);
       if (!isOnline(ws.userId)) {
         scheduleLastSeen(ws.userId);
+        announceOffline(ws.userId);
       }
     }
   });
