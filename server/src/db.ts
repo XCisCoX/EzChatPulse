@@ -35,9 +35,16 @@ export function openDb(dbPath: string): Db {
 }
 
 let defaultDb: Db | null = null;
+let testDb: Db | null = null;
 
-/** App-wide default connection (config.dbPath). */
+/** Override for tests: call `setTestDb(openDb(':memory:'))` before running routes. */
+export function setTestDb(db: Db | null): void {
+  testDb = db;
+}
+
+/** App-wide default connection (config.dbPath), or the test override if set. */
 export function getDb(): Db {
+  if (testDb) return testDb;
   if (!defaultDb) defaultDb = openDb(config.dbPath);
   return defaultDb;
 }

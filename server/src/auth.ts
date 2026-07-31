@@ -1,0 +1,105 @@
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
+import type { Request, Response, NextFunction } from 'express';
+import { config } from './config.js';
+import type { Db } from './db.js';
+import { BadRequest, Conflict, Unauthorized } from './errors.js';
+
+const SALT_ROUNDS = 10;
+
+// ── DTO ────────────────────────────────────────────────────────────────
+export interface UserDTO {
+  id: number;
+  username: string;
+  displayName: string;
+  createdAt: number;
+}
+
+function toDTO(row: {
+  id: number;
+  username: string;
+  display_name: string;
+  created_at: number;
+}): UserDTO {
+  return { id: row.id, username: row.username, displayName: row.display_name, createdAt: row.created_at };
+}
+
+// ── Registration ───────────────────────────────────────────────────────
+export function register(
+  db: Db,
+  username: string,
+  displayName: string,
+  password: string,
+): { token: string; user: UserDTO } {
+  if (!/^[a-zA-Z0-9_]{3,32}$/.test(username)) {
+    throw new BadRequest('Username must be 3–32 alphanumeric characters or underscores');
+  }
+  if (password.length < 8) {
+    throw new BadRequest('Password must be at least 8 characters');
+  }
+  const existing = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
+  if (existing) throw new Conflict('Username is already taken');
+
+  const hash = bcrypt.hashSync(password, SALT_ROUNDS);
+  const now = Date.now();
+  const info = db
+    .prepare('INSERT INTO users (username, display_name, password_hash, created_at) VALUES (?, ?, ?, ?)')
+    .run(username, displayName, hash, now);
+
+  const user = toDTO({ id: Number(info.lastInsertRowid), username, display_name: displayName, created_at: now });
+  const token = jwt.sign({ sub: user.id }, config.jwtSecret, { expiresIn: '7d' });
+  return { token, user };
+}
+
+// ── Login ──────────────────────────────────────────────────────────────
+export function login(
+  db: Db,
+  username: string,
+  password: string,
+): { token: string; user: UserDTO } {
+  const row = db
+    .prepare('SELECT id, username, display_name, password_hash, created_at FROM users WHERE username = ?')
+    .get(username) as
+    | { id: number; username: string; display_name: string; password_hash: string; created_at: number }
+    | undefined;
+
+  if (!row) throw new Unauthorized('Invalid username or password');
+  if (!bcrypt.compareSync(password, row.password_hash)) throw new Unauthorized('Invalid username or password');
+
+  const user = toDTO(row);
+  const token = jwt.sign({ sub: user.id }, config.jwtSecret, { expiresIn: '7d' });
+  return { token, user };
+}
+
+// ── Lookups ────────────────────────────────────────────────────────────
+export function getUserById(db: Db, id: number): UserDTO | null {
+  const row = db
+    .prepare('SELECT id, username, display_name, created_at FROM users WHERE id = ?')
+    .get(id) as { id: number; username: string; display_name: string; created_at: number } | undefined;
+  return row ? toDTO(row) : null;
+}
+
+export function searchUsers(db: Db, query: string): UserDTO[] {
+  const rows = db
+    .prepare('SELECT id, username, display_name, created_at FROM users WHERE username LIKE ? ORDER BY username LIMIT 20')
+    .all(`%${query}%`) as Array<{ id: number; username: string; display_name: string; created_at: number }>;
+  return rows.map(toDTO);
+}
+
+// ── Express middleware ─────────────────────────────────────────────────
+export function requireAuth(req: Request, res: Response, next: NextFunction): void {
+  const header = req.headers.authorization;
+  if (!header?.startsWith('Bearer ')) {
+    res.status(401).json({ error: 'Missing or invalid authorization header' });
+    return;
+  }
+  try {
+    const payload = jwt.verify(header.slice(7), config.jwtSecret) as jwt.JwtPayload;
+    const sub = Number(payload.sub);
+    if (!Number.isInteger(sub)) throw new Error('invalid sub');
+    req.userId = sub;
+    next();
+  } catch {
+    res.status(401).json({ error: 'Invalid or expired token' });
+  }
+}
