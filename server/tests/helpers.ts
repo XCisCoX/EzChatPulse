@@ -1,11 +1,13 @@
 import http from 'node:http';
 import express from 'express';
+import multer from 'multer';
 import { WebSocketServer, WebSocket as RawWebSocket } from 'ws';
 import { openDb, setTestDb, type Db } from '../src/db.js';
 import { AppError } from '../src/errors.js';
 import authRoutes from '../src/api/auth_routes.js';
 import userRoutes from '../src/api/user_routes.js';
 import chatRoutes from '../src/api/chat_routes.js';
+import fileRoutes from '../src/api/file_routes.js';
 import { handleConnection } from '../src/ws/handler.js';
 
 export interface TestContext {
@@ -27,10 +29,13 @@ export function createTestContext(): Promise<TestContext> {
   app.get('/api/health', (_req, res) => res.json({ ok: true }));
   app.use('/api', authRoutes);
   app.use('/api', chatRoutes);
+  app.use('/api', fileRoutes);
   app.use('/api/users', userRoutes);
   app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
     if (err instanceof AppError) {
       res.status(err.statusCode).json({ error: err.message });
+    } else if (err instanceof multer.MulterError) {
+      res.status(400).json({ error: err.message });
     } else {
       console.error('Unhandled error:', err);
       res.status(500).json({ error: 'Internal server error' });
