@@ -1,6 +1,7 @@
 import type { Db } from '../db.js';
-import { BadRequest, NotFound } from '../errors.js';
+import { BadRequest, Conflict, Forbidden, NotFound } from '../errors.js';
 import { isOnline } from '../ws/hub.js';
+import { isMember } from './membership.js';
 import { getMessage, type MessageDTO } from './messages.js';
 
 export interface MemberInfo {
@@ -20,6 +21,23 @@ export interface ChatDTO {
   members: MemberInfo[];
   lastMessage: MessageDTO | null;
   unread: number;
+}
+
+/** Viewer-agnostic chat shape used in real-time events (no per-viewer fields). */
+export interface ChatSummary {
+  id: number;
+  type: 'private' | 'group';
+  name: string | null;
+  createdAt: number;
+  members: MemberInfo[];
+}
+
+function assertAdmin(db: Db, chatId: number, userId: number): void {
+  const row = db
+    .prepare('SELECT role FROM chat_members WHERE chat_id = ? AND user_id = ?')
+    .get(chatId, userId) as { role: string } | undefined;
+  if (!row) throw new Forbidden('You are not a member of this chat');
+  if (row.role !== 'admin') throw new Forbidden('Only admins can do this');
 }
 
 /** Find the private chat between two users, creating it if needed. Returns chat id. */
@@ -52,6 +70,61 @@ export function findOrCreatePrivate(db: Db, userId: number, otherId: number): nu
   })();
 }
 
+/** Create a group chat; creator becomes admin. Returns chat id. */
+export function createGroup(db: Db, creatorId: number, name: string, userIds: number[]): number {
+  const trimmed = name.trim();
+  if (!trimmed || trimmed.length > 64) throw new BadRequest('Group name must be 1–64 characters');
+
+  const others = new Set<number>();
+  for (const id of userIds) {
+    const n = Number(id);
+    if (!Number.isInteger(n) || n === creatorId) continue;
+    others.add(n);
+  }
+  for (const id of others) {
+    if (!db.prepare('SELECT id FROM users WHERE id = ?').get(id)) throw new NotFound('User not found');
+  }
+
+  const now = Date.now();
+  return db.transaction(() => {
+    const info = db
+      .prepare('INSERT INTO chats (type, name, created_by, created_at) VALUES (?, ?, ?, ?)')
+      .run('group', trimmed, creatorId, now);
+    const chatId = Number(info.lastInsertRowid);
+    const ins = db.prepare('INSERT INTO chat_members (chat_id, user_id, role, joined_at) VALUES (?, ?, ?, ?)');
+    ins.run(chatId, creatorId, 'admin', now);
+    for (const id of others) ins.run(chatId, id, 'member', now);
+    return chatId;
+  })();
+}
+
+export function addMember(db: Db, actorId: number, chatId: number, newUserId: number): void {
+  assertAdmin(db, chatId, actorId);
+  const chat = db.prepare('SELECT type FROM chats WHERE id = ?').get(chatId) as { type: string } | undefined;
+  if (!chat) throw new NotFound('Chat not found');
+  if (chat.type !== 'group') throw new BadRequest('Only group chats can have members added');
+  if (!db.prepare('SELECT id FROM users WHERE id = ?').get(newUserId)) throw new NotFound('User not found');
+  const existing = db.prepare('SELECT 1 FROM chat_members WHERE chat_id = ? AND user_id = ?').get(chatId, newUserId);
+  if (existing) throw new Conflict('User is already a member');
+  db.prepare('INSERT INTO chat_members (chat_id, user_id, role, joined_at) VALUES (?, ?, ?, ?)').run(
+    chatId,
+    newUserId,
+    'member',
+    Date.now(),
+  );
+}
+
+export function removeMember(db: Db, actorId: number, chatId: number, targetUserId: number): void {
+  assertAdmin(db, chatId, actorId);
+  const chat = db.prepare('SELECT type FROM chats WHERE id = ?').get(chatId) as { type: string } | undefined;
+  if (!chat) throw new NotFound('Chat not found');
+  if (chat.type !== 'group') throw new BadRequest('Only group chats can have members removed');
+  if (actorId === targetUserId) throw new BadRequest('Admins cannot remove themselves');
+  const member = db.prepare('SELECT 1 FROM chat_members WHERE chat_id = ? AND user_id = ?').get(chatId, targetUserId);
+  if (!member) throw new NotFound('User is not a member of this chat');
+  db.prepare('DELETE FROM chat_members WHERE chat_id = ? AND user_id = ?').run(chatId, targetUserId);
+}
+
 export function listMembers(db: Db, chatId: number): MemberInfo[] {
   const rows = db
     .prepare(
@@ -76,6 +149,58 @@ export function listMembers(db: Db, chatId: number): MemberInfo[] {
     online: isOnline(r.id),
     lastSeenAt: r.last_seen_at,
   }));
+}
+
+/** Full chat detail for one viewer (membership required). */
+export function getChat(db: Db, chatId: number, viewerId: number): ChatDTO | null {
+  const row = db
+    .prepare(
+      `SELECT c.id, c.type, c.name, c.created_at,
+              (SELECT MAX(m.id) FROM messages m WHERE m.chat_id = c.id) AS last_msg_id,
+              (SELECT COUNT(*) FROM messages m
+               WHERE m.chat_id = c.id AND m.id > COALESCE(rs.last_read_message_id, 0)) AS unread
+       FROM chats c
+       LEFT JOIN read_state rs ON rs.chat_id = c.id AND rs.user_id = ?
+       WHERE c.id = ?`,
+    )
+    .get(viewerId, chatId) as
+    | {
+        id: number;
+        type: string;
+        name: string | null;
+        created_at: number;
+        last_msg_id: number | null;
+        unread: number;
+      }
+    | undefined;
+  if (!row) return null;
+  if (!isMember(db, chatId, viewerId)) throw new Forbidden('You are not a member of this chat');
+  return {
+    id: row.id,
+    type: row.type as 'private' | 'group',
+    name: row.name,
+    createdAt: row.created_at,
+    unread: row.unread,
+    lastMessage: row.last_msg_id ? getMessage(db, row.last_msg_id) : null,
+    members: listMembers(db, chatId),
+  };
+}
+
+/** Viewer-agnostic summary for real-time events. */
+export function chatSummary(db: Db, chatId: number): ChatSummary {
+  const row = db.prepare('SELECT id, type, name, created_at FROM chats WHERE id = ?').get(chatId) as {
+    id: number;
+    type: string;
+    name: string | null;
+    created_at: number;
+  };
+  return {
+    id: row.id,
+    type: row.type as 'private' | 'group',
+    name: row.name,
+    createdAt: row.created_at,
+    members: listMembers(db, chatId),
+  };
 }
 
 /** All chats the user belongs to, newest activity first, with unread + last message. */

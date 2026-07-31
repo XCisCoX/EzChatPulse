@@ -2,8 +2,17 @@ import { Router } from 'express';
 import type { Request, Response, NextFunction } from 'express';
 import { getDb } from '../db.js';
 import { requireAuth } from '../auth.js';
-import { findOrCreatePrivate, listChats } from '../services/chats.js';
+import {
+  findOrCreatePrivate,
+  listChats,
+  getChat,
+  chatSummary,
+  createGroup,
+  addMember,
+  removeMember,
+} from '../services/chats.js';
 import { listMessages, markRead } from '../services/messages.js';
+import { broadcastToChat, sendToUser } from '../ws/hub.js';
 
 const router = Router();
 
@@ -17,14 +26,31 @@ router.get('/chats', requireAuth, wrap(async (req, res) => {
   res.json({ chats });
 }));
 
-router.post('/chats', requireAuth, wrap(async (req, res) => {
-  const { type, userId } = req.body;
-  if (type !== 'private') {
-    res.status(400).json({ error: 'Only private chats are supported for now' });
+router.get('/chats/:id', requireAuth, wrap(async (req, res) => {
+  const chatId = Number(req.params.id);
+  const chat = getChat(getDb(), chatId, req.userId);
+  if (!chat) {
+    res.status(404).json({ error: 'Chat not found' });
     return;
   }
-  const chatId = findOrCreatePrivate(getDb(), req.userId, Number(userId));
-  res.status(201).json({ chatId });
+  res.json({ chat });
+}));
+
+router.post('/chats', requireAuth, wrap(async (req, res) => {
+  const { type } = req.body;
+  if (type === 'private') {
+    const chatId = findOrCreatePrivate(getDb(), req.userId, Number(req.body.userId));
+    res.status(201).json({ chatId });
+    return;
+  }
+  if (type === 'group') {
+    const db = getDb();
+    const chatId = createGroup(db, req.userId, String(req.body.name ?? ''), Array.isArray(req.body.userIds) ? req.body.userIds : []);
+    broadcastToChat(chatId, { t: 'chat.created', chat: chatSummary(db, chatId) });
+    res.status(201).json({ chatId });
+    return;
+  }
+  res.status(400).json({ error: 'type must be "private" or "group"' });
 }));
 
 router.get('/chats/:id/messages', requireAuth, wrap(async (req, res) => {
@@ -43,6 +69,36 @@ router.post('/chats/:id/read', requireAuth, wrap(async (req, res) => {
     return;
   }
   markRead(getDb(), req.userId, chatId, msgId);
+  res.json({ ok: true });
+}));
+
+router.post('/chats/:id/members', requireAuth, wrap(async (req, res) => {
+  const chatId = Number(req.params.id);
+  const newUserId = Number(req.body.userId);
+  if (!Number.isInteger(newUserId)) {
+    res.status(400).json({ error: 'userId is required' });
+    return;
+  }
+  const db = getDb();
+  addMember(db, req.userId, chatId, newUserId);
+
+  const summary = chatSummary(db, chatId);
+  broadcastToChat(chatId, { t: 'chat.member', cid: chatId, action: 'added', userId: newUserId, chat: summary });
+  sendToUser(newUserId, { t: 'chat.created', chat: summary }); // new member (and their devices) gets the chat
+  res.status(200).json({ members: summary.members });
+}));
+
+router.delete('/chats/:id/members', requireAuth, wrap(async (req, res) => {
+  const chatId = Number(req.params.id);
+  const targetUserId = Number(req.body.userId);
+  if (!Number.isInteger(targetUserId)) {
+    res.status(400).json({ error: 'userId is required' });
+    return;
+  }
+  removeMember(getDb(), req.userId, chatId, targetUserId);
+
+  broadcastToChat(chatId, { t: 'chat.member', cid: chatId, action: 'removed', userId: targetUserId });
+  sendToUser(targetUserId, { t: 'chat.removed', cid: chatId }); // removed user drops the chat from their UI
   res.json({ ok: true });
 }));
 

@@ -30,6 +30,21 @@ export function connectionCount(userId: number): number {
   return connections.get(userId)?.size ?? 0;
 }
 
+/** Send a JSON event to all sockets of one user (e.g. chat removal notice). */
+export function sendToUser(userId: number, event: object): number {
+  const payload = JSON.stringify(event);
+  const set = connections.get(userId);
+  if (!set) return 0;
+  let sent = 0;
+  for (const ws of set) {
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(payload);
+      sent++;
+    }
+  }
+  return sent;
+}
+
 /**
  * Fan-out a JSON event to all online members of a chat.
  * Payload is serialized once and reused for every socket (no per-socket re-serialize).
