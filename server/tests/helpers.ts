@@ -5,6 +5,7 @@ import { openDb, setTestDb, type Db } from '../src/db.js';
 import { AppError } from '../src/errors.js';
 import authRoutes from '../src/api/auth_routes.js';
 import userRoutes from '../src/api/user_routes.js';
+import chatRoutes from '../src/api/chat_routes.js';
 import { handleConnection } from '../src/ws/handler.js';
 
 export interface TestContext {
@@ -25,6 +26,7 @@ export function createTestContext(): Promise<TestContext> {
   app.use(express.json({ limit: '100kb' }));
   app.get('/api/health', (_req, res) => res.json({ ok: true }));
   app.use('/api', authRoutes);
+  app.use('/api', chatRoutes);
   app.use('/api/users', userRoutes);
   app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
     if (err instanceof AppError) {
@@ -128,4 +130,13 @@ export function waitForMessage(
     };
     ws.on('message', onMsg);
   });
+}
+
+/** Insert `count` text messages directly into the DB (for pagination tests). */
+export function seedMessages(db: Db, chatId: number, senderId: number, count: number, textPrefix = 'msg'): void {
+  const ins = db.prepare('INSERT INTO messages (chat_id, sender_id, kind, text, created_at) VALUES (?, ?, ?, ?, ?)');
+  const now = Date.now();
+  db.transaction(() => {
+    for (let i = 1; i <= count; i++) ins.run(chatId, senderId, 'text', `${textPrefix} ${i}`, now + i);
+  })();
 }

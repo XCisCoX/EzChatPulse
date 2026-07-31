@@ -8,6 +8,7 @@ import { getDb } from './db.js';
 import { AppError } from './errors.js';
 import authRoutes from './api/auth_routes.js';
 import userRoutes from './api/user_routes.js';
+import chatRoutes from './api/chat_routes.js';
 import { handleConnection } from './ws/handler.js';
 import { flushAll } from './presence.js';
 
@@ -21,6 +22,7 @@ app.get('/api/health', (_req, res) => {
 
 // Routes
 app.use('/api', authRoutes);
+app.use('/api', chatRoutes);
 app.use('/api/users', userRoutes);
 
 // Central error handler: AppError → JSON status, everything else → 500
