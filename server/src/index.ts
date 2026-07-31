@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import path from 'node:path';
 import https from 'node:https';
 import type { Request, Response, NextFunction } from 'express';
 import express from 'express';
@@ -27,6 +28,16 @@ app.use('/api', authRoutes);
 app.use('/api', chatRoutes);
 app.use('/api', fileRoutes);
 app.use('/api/users', userRoutes);
+
+// Serve the built web client (single deployment: `npm run build && npm start`)
+const webDist = path.resolve(import.meta.dirname, '../../web/dist');
+if (fs.existsSync(webDist)) {
+  app.use(express.static(webDist));
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api')) return next();
+    res.sendFile(path.join(webDist, 'index.html'));
+  });
+}
 
 // Central error handler: AppError → JSON status, everything else → 500
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {

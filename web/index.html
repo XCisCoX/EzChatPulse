@@ -3,10 +3,45 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0b0e1a" />
     <title>ChatPulse</title>
   </head>
   <body>
-    <div id="app"></div>
+    <div id="app">
+      <!-- Login / register -->
+      <div id="login-view" class="view hidden"></div>
+
+      <!-- Main app -->
+      <div id="main-view" class="view hidden">
+        <aside id="sidebar">
+          <header id="sidebar-header">
+            <div id="me-chip"></div>
+            <div id="sidebar-actions">
+              <button id="btn-new-chat" class="icon-btn" title="New chat">✎</button>
+              <button id="btn-new-group" class="icon-btn" title="New group">＋</button>
+            </div>
+          </header>
+          <div id="chat-list"></div>
+        </aside>
+        <section id="chat-pane">
+          <header id="chat-header"></header>
+          <div id="messages"></div>
+          <div id="typing-bar" class="hidden"></div>
+          <footer id="composer"></footer>
+        </section>
+      </div>
+
+      <!-- Empty state -->
+      <div id="empty-state" class="hidden">
+        <div class="empty-logo">◉</div>
+        <h1>ChatPulse</h1>
+        <p>Pick a chat or start a new conversation</p>
+      </div>
+
+      <div id="modal-root"></div>
+      <div id="lightbox" class="hidden"></div>
+      <div id="toast-root"></div>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
