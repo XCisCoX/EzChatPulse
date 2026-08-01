@@ -4,6 +4,7 @@ import { getDb } from '../db.js';
 import { register, login, requireAuth, getUserById } from '../auth.js';
 import { isOnline } from '../ws/hub.js';
 import { rateLimit } from '../rate-limit.js';
+import { config } from '../config.js';
 
 const router = Router();
 
@@ -14,9 +15,9 @@ function wrap(fn: (req: Request, res: Response) => Promise<void>) {
   };
 }
 
-/** 10 attempts per minute per IP on auth endpoints (brute-force guard). */
+/** N attempts per minute per IP on auth endpoints (brute-force guard). */
 function authLimiter(req: Request, res: Response, next: NextFunction): void {
-  if (!rateLimit(`auth:${req.ip}`, 10, 60_000)) {
+  if (!rateLimit(`auth:${req.ip}`, config.authRatePerMin, 60_000)) {
     res.status(429).json({ error: 'Too many attempts — try again in a minute' });
     return;
   }

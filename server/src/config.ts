@@ -13,6 +13,7 @@ export interface Config {
   jwtSecret: string;
   maxUploadBytes: number;
   maxWsFrameBytes: number;
+  authRatePerMin: number;
 }
 
 // Assumes the server is launched from the server/ directory (npm -w server does this).
@@ -46,5 +47,6 @@ export const config: Config = (() => {
     jwtSecret: loadOrCreateJwtSecret(dataDir),
     maxUploadBytes: Number(process.env.MAX_UPLOAD_BYTES ?? 25 * 1024 * 1024),
     maxWsFrameBytes: 64 * 1024,
+    authRatePerMin: Number(process.env.AUTH_RATE_PER_MIN ?? 10),
   };
 })();
