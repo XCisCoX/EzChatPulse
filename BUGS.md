@@ -8,15 +8,15 @@
 
 | ID | Issue | Severity | Type | Status | Area |
 |----|-------|----------|------|--------|------|
-| CP-1 | Read receipts: second tick (✓✓) never appears | ⚠️ major | bug | 🔴 open | chat pane / presence |
-| CP-2 | No auto-scroll when at the bottom of a chat | ⚠️ major | bug/ux | 🔴 open | chat pane |
-| CP-3 | Persian (RTL) messages render LTR | 🔸 minor | feature | 🔴 open | bubbles |
-| CP-4 | Esc should close the open chat | ✨ polish | suggestion | 🔴 open | keyboard |
-| CP-5 | Hard to find how to start a new chat | 🔸 minor | ux feedback | 🔴 open | sidebar |
-| CP-6 | Image pokes outside the bubble on phones | 🔸 minor | bug | 🔴 open | bubbles / css |
-| CP-7 | Selected-chat highlight doesn't restore on chat switch | 🔸 minor | bug | 🔴 open | sidebar / css |
-| CP-8 | Narrow screens split the pane when no chat is open | 🔸 minor | bug | 🔴 open | layout / css |
-| CP-9 | History loads newest-first on a fresh device (top msg = 26th, bottom = 1st) | ⚠️ major | bug | 🔴 open | history load |
+| CP-1 | Read receipts: second tick (✓✓) never appears | ⚠️ major | bug | ✅ verified | chat pane / presence |
+| CP-2 | No auto-scroll when at the bottom of a chat | ⚠️ major | bug/ux | ✅ verified | chat pane |
+| CP-3 | Persian (RTL) messages render LTR | 🔸 minor | feature | ✅ verified | bubbles |
+| CP-4 | Esc should close the open chat | ✨ polish | suggestion | ✅ verified | keyboard |
+| CP-5 | Hard to find how to start a new chat | 🔸 minor | ux feedback | ✅ verified | sidebar |
+| CP-6 | Image pokes outside the bubble on phones | 🔸 minor | bug | 🟢 fixed | bubbles / css |
+| CP-7 | Selected-chat highlight doesn't restore on chat switch | 🔸 minor | bug | ✅ verified | sidebar / css |
+| CP-8 | Narrow screens split the pane when no chat is open | 🔸 minor | bug | 🟢 fixed | layout / css |
+| CP-9 | History loads newest-first on a fresh device (top msg = 26th, bottom = 1st) | ⚠️ major | bug | ✅ verified | history load |
 
 ---
 
@@ -125,6 +125,41 @@
   - `web/src/ui/chat.ts` — `render()` L232–237
 - **Fix direction:** reverse-then-append (or iterate API order with prepend) —
   one reversal, not two; verify first-page load also scrolls to the newest.
+
+---
+
+## Fix round 1 — 2026-08-02 (all 9 closed)
+
+Root causes found & fixed in one pass, deployed as commits `bef2f53`, `aee1b28`, `5bffeb9`:
+
+- **CP-9 + CP-2 (same root cause):** the store subscription's "new message →
+  scroll" check compared the just-added message to itself (store pushes *before*
+  notify), so auto-scroll was dead code — the pane opened pinned to the TOP of
+  the loaded page. Fixed by comparing against the last *rendered* key and
+  scrolling only on appends while at bottom. Also fixed a second latent bug:
+  older history pages were double-reversed (`reverse()` + `unshift()`), so the
+  prepended block rendered newest-first; and prepended rows were appended at the
+  bottom of the DOM instead of the top. All three fixed and verified live with a
+  60-message conversation (chronological across the page boundary, pane opens
+  at the newest message).
+- **CP-1:** read state was only fed by live WS events; after reload the client
+  had no read cursors. Server chat DTO now includes `readBy` (per-member read
+  cursor); client seeds its map on upsert. Verified live: ✓✓ appears when the
+  other party reads, and persists across a full reload.
+- **CP-3:** `dir="auto"` on message content + composer (verified with a live
+  Persian message).
+- **CP-4:** global Esc handler closes the open chat (skips when a modal or the
+  lightbox is up).
+- **CP-5:** icon-only buttons replaced with labeled "✎ New chat" / "＋ New group"
+  (new-chat button gradient-highlighted) + empty-list hint in the sidebar.
+- **CP-6:** image max-width `min(280px, 100%)` + `min-width:0` on bubble content.
+  **Needs phone retest.**
+- **CP-7:** sidebar render key omitted `activeChatId`, so switching chats never
+  re-rendered the list — the `.active` class never moved. Key now includes it.
+- **CP-8:** `#empty-state` was a flex sibling of `#main-view`, so on narrow
+  screens it split the app and squeezed the sidebar to half width. Moved inside
+  `#main-view` (fills the pane area on desktop) and hidden ≤820px (sidebar takes
+  the whole screen). **Needs phone retest.**
 
 ---
 
