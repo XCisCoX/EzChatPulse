@@ -12,6 +12,9 @@ let lastTypingSent = 0;
 
 const $ = <T extends HTMLElement>(sel: string): T => document.querySelector(sel) as T;
 
+/** Stable DOM key for a message row (tempId for optimistic sends, else server id). */
+const keyOf = (m: UIMessage): string => (m.tempId ? `t:${m.tempId}` : `m:${m.id}`);
+
 export function mountChatPane(): void {
   const headerEl = $('#chat-header');
   const messagesEl = $('#messages');
@@ -279,20 +282,20 @@ export function mountChatPane(): void {
     messagesEl.appendChild(makeMessageNode(chat, msg));
   }
 
-  /** Insert an older message ABOVE the current first row (history pagination). */
-  function prependMessage(chat: UIChat, msg: UIMessage): void {
-    const firstRow = messagesEl.querySelector<HTMLElement>('.msg-row');
-    if (!firstRow) {
-      appendMessage(chat, msg);
-      return;
-    }
-    // day separator between this (older) message and the one below, if days differ
-    const firstKey = firstRow.dataset.key ?? '';
-    const below = chat.messages.find((m) => (m.tempId ? `t:${m.tempId}` : `m:${m.id}`) === firstKey);
-    const belowDay = below ? dayKey(below.createdAt) : '';
+  /** Insert an older message ABOVE the current first row (history pagination).
+   *  `idx` is its index in chat.messages; we anchor on the previous message
+   *  (already inserted in an earlier notify) so consecutive prepends keep
+   *  chronological order instead of reversing the block. */
+  function prependMessage(chat: UIChat, msg: UIMessage, idx: number): void {
+    const prev = idx > 0 ? chat.messages[idx - 1] : undefined;
+    const prevKey = prev ? keyOf(prev) : null;
+    const anchorEl = prevKey
+      ? messagesEl.querySelector<HTMLElement>(`.msg-row[data-key="${CSS.escape(prevKey)}"]`)
+      : null;
     const frag = document.createDocumentFragment();
     const d = dayKey(msg.createdAt);
-    if (d !== belowDay) {
+    const prevDay = prev ? dayKey(prev.createdAt) : '';
+    if (prev && d !== prevDay) {
       const sep = document.createElement('div');
       sep.className = 'day-sep';
       const span = document.createElement('span');
@@ -301,7 +304,13 @@ export function mountChatPane(): void {
       frag.appendChild(sep);
     }
     frag.appendChild(makeMessageNode(chat, msg));
-    messagesEl.insertBefore(frag, firstRow);
+    if (anchorEl) {
+      anchorEl.after(frag);
+    } else {
+      const firstRow = messagesEl.querySelector<HTMLElement>('.msg-row');
+      if (firstRow) messagesEl.insertBefore(frag, firstRow);
+      else messagesEl.appendChild(frag);
+    }
   }
 
   function renderTypingBar(chat: UIChat): void {
@@ -462,7 +471,6 @@ export function mountChatPane(): void {
     // incremental updates for the already-open chat
     renderHeader(chat); // cheap; keeps presence subtitle fresh
     updateHeaderSub(chat);
-    const keyOf = (m: UIMessage): string => (m.tempId ? `t:${m.tempId}` : `m:${m.id}`);
     const domRows = [...messagesEl.querySelectorAll<HTMLElement>('.msg-row')];
     const rendered = new Set(domRows.map((el) => el.dataset.key));
     const firstRenderedKey = domRows[0]?.dataset.key ?? null;
@@ -477,7 +485,7 @@ export function mountChatPane(): void {
       if (rendered.has(key)) continue;
       // messages older than the rendered window go on top (history pagination);
       // everything else (new msgs, first-page streaming) appends at the bottom
-      if (firstRenderedIdx >= 0 && i < firstRenderedIdx) prependMessage(chat, msg);
+      if (firstRenderedIdx >= 0 && i < firstRenderedIdx) prependMessage(chat, msg, i);
       else {
         appendMessage(chat, msg);
         appended++;
