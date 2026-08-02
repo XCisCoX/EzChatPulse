@@ -38,6 +38,13 @@ async function boot(): Promise<void> {
   });
   mountChatPane();
 
+  // Esc closes the open chat (unless a modal or the lightbox is up)
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    if (document.querySelector('#modal-root .modal-overlay, #lightbox:not(.hidden)')) return;
+    if (store.state.activeChatId != null) store.setActiveChat(null);
+  });
+
   const token = getToken();
   if (!token) {
     showLogin();

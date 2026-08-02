@@ -52,7 +52,7 @@ class Store {
     this.notify();
   }
 
-  upsertChat(chat: ChatSummary & { lastMessage?: MessageDTO | null; unread?: number }): UIChat {
+  upsertChat(chat: ChatSummary & { lastMessage?: MessageDTO | null; unread?: number; readBy?: { userId: number; msgId: number }[] }): UIChat {
     const existing = this.state.chats.get(chat.id);
     const merged: UIChat =
       existing ??
@@ -72,6 +72,8 @@ class Store {
     merged.members = chat.members;
     if (chat.lastMessage !== undefined) merged.lastMessage = chat.lastMessage;
     if (chat.unread !== undefined) merged.unread = chat.unread;
+    // seed read cursors from the server (monotonic — only ever advances)
+    if (chat.readBy) for (const r of chat.readBy) merged.readBy.set(r.userId, r.msgId);
     this.state.chats.set(chat.id, merged);
     this.notify();
     return merged;

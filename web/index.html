@@ -17,8 +17,8 @@
           <header id="sidebar-header">
             <div id="me-chip"></div>
             <div id="sidebar-actions">
-              <button id="btn-new-chat" class="icon-btn" title="New chat">✎</button>
-              <button id="btn-new-group" class="icon-btn" title="New group">＋</button>
+              <button id="btn-new-chat" class="action-btn" title="Start a new chat">✎ New chat</button>
+              <button id="btn-new-group" class="action-btn" title="Create a group">＋ New group</button>
             </div>
           </header>
           <div id="chat-list"></div>
@@ -29,13 +29,14 @@
           <div id="typing-bar" class="hidden"></div>
           <footer id="composer"></footer>
         </section>
-      </div>
 
-      <!-- Empty state -->
-      <div id="empty-state" class="hidden">
-        <div class="empty-logo">◉</div>
-        <h1>ChatPulse</h1>
-        <p>Pick a chat or start a new conversation</p>
+        <!-- Empty state lives inside #main-view so it fills the pane area
+             instead of squeezing the sidebar (flex sibling layout bug). -->
+        <div id="empty-state" class="hidden">
+          <div class="empty-logo">◉</div>
+          <h1>ChatPulse</h1>
+          <p>Pick a chat or start a new conversation</p>
+        </div>
       </div>
 
       <div id="modal-root"></div>

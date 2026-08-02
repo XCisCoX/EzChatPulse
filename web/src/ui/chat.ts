@@ -92,6 +92,7 @@ export function mountChatPane(): void {
   function bubbleContent(msg: UIMessage): HTMLElement {
     const content = document.createElement('div');
     content.className = 'msg-content';
+    content.setAttribute('dir', 'auto'); // RTL-aware bubbles (Persian etc.)
     if (msg.kind === 'text') {
       content.textContent = msg.text ?? '';
     } else if (msg.kind === 'image' && msg.file) {
@@ -278,6 +279,31 @@ export function mountChatPane(): void {
     messagesEl.appendChild(makeMessageNode(chat, msg));
   }
 
+  /** Insert an older message ABOVE the current first row (history pagination). */
+  function prependMessage(chat: UIChat, msg: UIMessage): void {
+    const firstRow = messagesEl.querySelector<HTMLElement>('.msg-row');
+    if (!firstRow) {
+      appendMessage(chat, msg);
+      return;
+    }
+    // day separator between this (older) message and the one below, if days differ
+    const firstKey = firstRow.dataset.key ?? '';
+    const below = chat.messages.find((m) => (m.tempId ? `t:${m.tempId}` : `m:${m.id}`) === firstKey);
+    const belowDay = below ? dayKey(below.createdAt) : '';
+    const frag = document.createDocumentFragment();
+    const d = dayKey(msg.createdAt);
+    if (d !== belowDay) {
+      const sep = document.createElement('div');
+      sep.className = 'day-sep';
+      const span = document.createElement('span');
+      span.textContent = dayLabel(msg.createdAt);
+      sep.appendChild(span);
+      frag.appendChild(sep);
+    }
+    frag.appendChild(makeMessageNode(chat, msg));
+    messagesEl.insertBefore(frag, firstRow);
+  }
+
   function renderTypingBar(chat: UIChat): void {
     const now = Date.now();
     const names = [...chat.typingUsers.entries()]
@@ -317,7 +343,7 @@ export function mountChatPane(): void {
   // ── composer ──────────────────────────────────────────────────────────
   composerEl.innerHTML = `
     <button id="attach-btn" class="icon-btn attach-btn" title="Attach file">＋</button>
-    <textarea id="msg-input" rows="1" placeholder="Message" maxlength="4096"></textarea>
+    <textarea id="msg-input" rows="1" dir="auto" placeholder="Message" maxlength="4096"></textarea>
     <button id="send-btn" class="send-btn" title="Send">➤</button>
     <input type="file" id="file-input" hidden />
     <div id="upload-progress" class="hidden"><div id="upload-bar"></div></div>
@@ -436,18 +462,31 @@ export function mountChatPane(): void {
     // incremental updates for the already-open chat
     renderHeader(chat); // cheap; keeps presence subtitle fresh
     updateHeaderSub(chat);
-    const rendered = new Set(
-      [...messagesEl.querySelectorAll<HTMLElement>('.msg-row')].map((el) => el.dataset.key),
-    );
-    const prevLast = chat.messages[chat.messages.length - 1];
-    for (const msg of chat.messages) {
-      const key = msg.tempId ? `t:${msg.tempId}` : `m:${msg.id}`;
-      if (!rendered.has(key)) appendMessage(chat, msg);
+    const keyOf = (m: UIMessage): string => (m.tempId ? `t:${m.tempId}` : `m:${m.id}`);
+    const domRows = [...messagesEl.querySelectorAll<HTMLElement>('.msg-row')];
+    const rendered = new Set(domRows.map((el) => el.dataset.key));
+    const firstRenderedKey = domRows[0]?.dataset.key ?? null;
+    const lastRenderedKey = domRows.length ? (domRows[domRows.length - 1]!.dataset.key ?? null) : null;
+    const firstRenderedIdx = firstRenderedKey
+      ? chat.messages.findIndex((m) => keyOf(m) === firstRenderedKey)
+      : -1;
+    let appended = 0;
+    for (let i = 0; i < chat.messages.length; i++) {
+      const msg = chat.messages[i]!;
+      const key = keyOf(msg);
+      if (rendered.has(key)) continue;
+      // messages older than the rendered window go on top (history pagination);
+      // everything else (new msgs, first-page streaming) appends at the bottom
+      if (firstRenderedIdx >= 0 && i < firstRenderedIdx) prependMessage(chat, msg);
+      else {
+        appendMessage(chat, msg);
+        appended++;
+      }
     }
     // reconcile existing nodes whose state changed (pending→acked, failed→resent, text update)
     for (const el of messagesEl.querySelectorAll<HTMLElement>('.msg-row')) {
       const key = el.dataset.key ?? '';
-      const storeMsg = chat.messages.find((m) => (m.tempId ? `t:${m.tempId}` : `m:${m.id}`) === key);
+      const storeMsg = chat.messages.find((m) => keyOf(m) === key);
       if (!storeMsg) continue;
       const stateChanged =
         el.classList.contains('pending') !== !!storeMsg.pending ||
@@ -461,7 +500,10 @@ export function mountChatPane(): void {
         el.classList.toggle('failed', !!storeMsg.failed);
       }
     }
-    if (prevLast && prevLast !== chat.messages[chat.messages.length - 1]) {
+    // follow new messages only when they were APPENDED and the user is at the
+    // bottom. Prepend-only updates (older history) must not move the viewport.
+    const newLast = chat.messages[chat.messages.length - 1];
+    if (appended > 0 && lastRenderedKey && newLast && keyOf(newLast) !== lastRenderedKey) {
       scrollToBottom();
     }
     renderTypingBar(chat);

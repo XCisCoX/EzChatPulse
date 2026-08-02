@@ -118,6 +118,53 @@ textarea::placeholder {
   gap: 6px;
 }
 
+/* labeled action buttons (new chat / new group) — discoverable, not icon-only */
+.action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--glass);
+  color: var(--text-1);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.14s, color 0.14s, transform 0.1s;
+  white-space: nowrap;
+}
+
+.action-btn:hover {
+  background: var(--glass-hover);
+  color: var(--text-0);
+}
+
+.action-btn:active {
+  transform: scale(0.96);
+}
+
+#btn-new-chat {
+  background: var(--grad);
+  color: #fff;
+  border-color: transparent;
+}
+
+#btn-new-chat:hover {
+  filter: brightness(1.12);
+}
+
+.list-empty {
+  margin: 18px 10px;
+  padding: 18px 14px;
+  text-align: center;
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.5;
+  border: 1px dashed var(--border);
+  border-radius: 14px;
+}
+
 #me-chip {
   display: flex;
   align-items: center;
@@ -399,11 +446,13 @@ textarea::placeholder {
   line-height: 1.45;
   word-break: break-word;
   white-space: pre-wrap;
+  min-width: 0; /* allow bubble content to shrink on narrow screens */
 }
 
 .msg-content img {
-  max-width: 280px;
+  max-width: min(280px, 100%);
   max-height: 320px;
+  height: auto;
   border-radius: 10px;
   display: block;
   cursor: zoom-in;
@@ -1099,6 +1148,11 @@ textarea::placeholder {
   #sidebar {
     width: 100%;
     min-width: 100%;
+  }
+
+  /* no chat selected → sidebar takes the whole screen, no empty-state split */
+  #empty-state {
+    display: none !important;
   }
 
   #chat-pane {

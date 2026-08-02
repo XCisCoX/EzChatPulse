@@ -179,6 +179,14 @@ test('unread count reflects messages sent while offline; read resets it', async 
   const chatsAfter = await (await authed('/api/chats', bob.token)).json();
   assert.equal(chatsAfter.chats[0].unread, 0);
 
+  // Alice's chat DTO now carries Bob's read cursor (drives ✓✓ ticks after reload)
+  const aliceChats = await (await authed('/api/chats', alice.token)).json();
+  const readBy: { userId: number; msgId: number }[] = aliceChats.chats[0].readBy ?? [];
+  assert.ok(
+    readBy.some((r) => r.userId === bob.user.id && r.msgId === chats.chats[0].lastMessage.id),
+    'alice chat DTO should include bob readBy cursor',
+  );
+
   wsA.close();
   wsB.close();
 });

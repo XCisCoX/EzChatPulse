@@ -89,17 +89,27 @@ export function mountSidebar(onSelect: (chatId: number) => void): void {
   function render(): void {
     renderMe();
     const chats = store.sortedChats();
-    const key = chats
-      .map(
-        (c) =>
-          `${c.id}:${c.lastMessage?.id ?? 0}:${c.unread}:${c.members
-            .map((m) => `${m.userId}${m.online ? '+on' : ''}`)
-            .join(',')}`,
-      )
-      .join('|');
+    // activeChatId is part of the key so the .active highlight moves on switch
+    const key =
+      `active:${store.state.activeChatId}|` +
+      chats
+        .map(
+          (c) =>
+            `${c.id}:${c.lastMessage?.id ?? 0}:${c.unread}:${c.members
+              .map((m) => `${m.userId}${m.online ? '+on' : ''}`)
+              .join(',')}`,
+        )
+        .join('|');
     if (key === lastKey) return;
     lastKey = key;
     list.innerHTML = '';
+    if (chats.length === 0) {
+      const hint = document.createElement('div');
+      hint.className = 'list-empty';
+      hint.textContent = 'No chats yet — tap “✎ New chat” to start';
+      list.appendChild(hint);
+      return;
+    }
     for (const chat of chats) list.appendChild(chatItem(chat));
   }
 

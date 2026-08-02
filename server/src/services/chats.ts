@@ -21,6 +21,8 @@ export interface ChatDTO {
   members: MemberInfo[];
   lastMessage: MessageDTO | null;
   unread: number;
+  /** Other members' read cursors: userId → highest message id they've read. */
+  readBy: { userId: number; msgId: number }[];
 }
 
 /** Viewer-agnostic chat shape used in real-time events (no per-viewer fields). */
@@ -151,6 +153,18 @@ export function listMembers(db: Db, chatId: number): MemberInfo[] {
   }));
 }
 
+/** Read cursors of all members (userId → highest message id read). */
+export function listReadState(db: Db, chatId: number): { userId: number; msgId: number }[] {
+  const rows = db
+    .prepare(
+      `SELECT user_id, last_read_message_id
+       FROM read_state
+       WHERE chat_id = ? AND last_read_message_id > 0`,
+    )
+    .all(chatId) as Array<{ user_id: number; last_read_message_id: number }>;
+  return rows.map((r) => ({ userId: r.user_id, msgId: r.last_read_message_id }));
+}
+
 /** Full chat detail for one viewer (membership required). */
 export function getChat(db: Db, chatId: number, viewerId: number): ChatDTO | null {
   const row = db
@@ -183,6 +197,7 @@ export function getChat(db: Db, chatId: number, viewerId: number): ChatDTO | nul
     unread: row.unread,
     lastMessage: row.last_msg_id ? getMessage(db, row.last_msg_id) : null,
     members: listMembers(db, chatId),
+    readBy: listReadState(db, chatId),
   };
 }
 
@@ -234,5 +249,6 @@ export function listChats(db: Db, userId: number): ChatDTO[] {
     unread: r.unread,
     lastMessage: r.last_msg_id ? getMessage(db, r.last_msg_id) : null,
     members: listMembers(db, r.id),
+    readBy: listReadState(db, r.id),
   }));
 }

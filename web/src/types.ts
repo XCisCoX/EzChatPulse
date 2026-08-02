@@ -46,6 +46,8 @@ export interface ChatSummary {
 export interface ChatDTO extends ChatSummary {
   lastMessage: MessageDTO | null;
   unread: number;
+  /** userId → highest message id they've read (others, from the server). */
+  readBy?: { userId: number; msgId: number }[];
 }
 
 /** Client-side message: optimistic sends carry tempId/pending/failed. */
@@ -55,7 +57,7 @@ export interface UIMessage extends MessageDTO {
   failed?: boolean;
 }
 
-export interface UIChat extends ChatDTO {
+export interface UIChat extends Omit<ChatDTO, 'readBy'> {
   messages: UIMessage[];
   hasMore: boolean;
   loadingHistory: boolean;
