@@ -40,8 +40,11 @@ export async function loadMore(chatId: number, before?: number): Promise<void> {
   store.touch();
   try {
     const { messages } = await api.messages(chatId, before);
-    // newest-first from the API → append in chronological order
-    for (const m of [...messages].reverse()) {
+    // API returns newest-first. First page: reverse then append → chronological.
+    // Older pages: prepend each as-is — unshift reverses iteration order, so the
+    // block lands chronological. (Reverse + prepend would double-reverse it.)
+    const ordered = before ? messages : [...messages].reverse();
+    for (const m of ordered) {
       store.addMessage(chatId, m, before ? 'prepend' : 'append');
     }
     chat.hasMore = messages.length >= 50;

@@ -283,19 +283,19 @@ export function mountChatPane(): void {
   }
 
   /** Insert an older message ABOVE the current first row (history pagination).
-   *  `idx` is its index in chat.messages; we anchor on the previous message
-   *  (already inserted in an earlier notify) so consecutive prepends keep
-   *  chronological order instead of reversing the block. */
+   *  `idx` is its index in chat.messages; the next message in the array is the
+   *  one directly below it (already in the DOM from an earlier notify), so we
+   *  insert before that row to keep consecutive prepends chronological. */
   function prependMessage(chat: UIChat, msg: UIMessage, idx: number): void {
-    const prev = idx > 0 ? chat.messages[idx - 1] : undefined;
-    const prevKey = prev ? keyOf(prev) : null;
-    const anchorEl = prevKey
-      ? messagesEl.querySelector<HTMLElement>(`.msg-row[data-key="${CSS.escape(prevKey)}"]`)
+    const next = idx + 1 < chat.messages.length ? chat.messages[idx + 1] : undefined;
+    const nextKey = next ? keyOf(next) : null;
+    const anchorEl = nextKey
+      ? messagesEl.querySelector<HTMLElement>(`.msg-row[data-key="${CSS.escape(nextKey)}"]`)
       : null;
     const frag = document.createDocumentFragment();
     const d = dayKey(msg.createdAt);
-    const prevDay = prev ? dayKey(prev.createdAt) : '';
-    if (prev && d !== prevDay) {
+    const nextDay = next ? dayKey(next.createdAt) : '';
+    if (next && d !== nextDay) {
       const sep = document.createElement('div');
       sep.className = 'day-sep';
       const span = document.createElement('span');
@@ -305,7 +305,7 @@ export function mountChatPane(): void {
     }
     frag.appendChild(makeMessageNode(chat, msg));
     if (anchorEl) {
-      anchorEl.after(frag);
+      messagesEl.insertBefore(frag, anchorEl);
     } else {
       const firstRow = messagesEl.querySelector<HTMLElement>('.msg-row');
       if (firstRow) messagesEl.insertBefore(frag, firstRow);
