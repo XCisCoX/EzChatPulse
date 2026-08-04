@@ -77,6 +77,34 @@ test('upload + download round-trip: owner can fetch, content matches', async () 
   assert.equal(await dl.arrayBuffer().then((b) => Buffer.from(b).toString()), 'hello chatpulse file');
 });
 
+test('persian filename: mojibake from latin1 header decode is repaired to UTF-8', async () => {
+  const alice = await registerUser(ctx, 'alice', 'Alice', 'password123');
+  const boundary = `----chatpulse${Date.now()}`;
+  const persian = 'تمرین سوم.pdf';
+  // Browsers put the raw UTF-8 bytes of the filename into the Content-Disposition
+  // header; busboy/multer decodes them as latin1 → mojibake. Splice the raw bytes
+  // in directly so the test exercises that exact path.
+  const prefix = Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="`);
+  const nameBytes = Buffer.from(persian, 'utf8');
+  const suffix = Buffer.from(`"\r\nContent-Type: application/pdf\r\n\r\n`);
+  const head = Buffer.concat([prefix, nameBytes, suffix]);
+  const tail = Buffer.from(`\r\n--${boundary}--\r\n`);
+  const body = Buffer.concat([head, Buffer.from('%PDF-1.4 fake'), tail]);
+
+  const res = await fetch(`http://127.0.0.1:${ctx.port}/api/upload`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${alice.token}`,
+      'content-type': `multipart/form-data; boundary=${boundary}`,
+    },
+    body,
+  });
+  assert.equal(res.status, 201);
+  const { file } = (await res.json()) as any;
+  assert.equal(file.name, persian, 'filename must survive the latin1→UTF-8 repair');
+  assert.equal(file.mime, 'application/pdf');
+});
+
 test('dedupe: same content uploads twice → same file id', async () => {
   const alice = await registerUser(ctx, 'alice', 'Alice', 'password123');
   const content = Buffer.from('identical bytes');

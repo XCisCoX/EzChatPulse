@@ -108,17 +108,87 @@ textarea::placeholder {
 #sidebar-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 14px 14px 10px;
+  padding: 12px 12px 10px;
   gap: 8px;
 }
 
-#sidebar-actions {
-  display: flex;
-  gap: 6px;
+#sidebar-search {
+  width: 100%;
+  padding: 9px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--glass);
+  color: var(--text-0);
+  font-size: 13.5px;
+  outline: none;
+  transition: border-color 0.14s, background 0.14s;
 }
 
-/* labeled action buttons (new chat / new group) — discoverable, not icon-only */
+#sidebar-search::placeholder {
+  color: var(--text-2);
+}
+
+#sidebar-search:focus {
+  border-color: rgba(168, 85, 247, 0.55);
+  background: var(--glass-strong);
+}
+
+#sidebar-footer {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--border);
+}
+
+/* “＋” action: opens a small new-chat/new-group menu */
+.fab-btn {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border: none;
+  border-radius: 50%;
+  background: var(--grad);
+  color: #fff;
+  font-size: 24px;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 6px 20px rgba(139, 92, 246, 0.45);
+  transition: transform 0.12s, filter 0.14s;
+}
+
+.fab-btn:hover {
+  filter: brightness(1.12);
+  transform: scale(1.06);
+}
+
+.fab-btn:active {
+  transform: scale(0.94);
+}
+
+#new-menu {
+  position: absolute;
+  bottom: 58px;
+  left: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px;
+  background: rgba(18, 23, 44, 0.92);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 14px 44px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(16px);
+  z-index: 6;
+}
+
+#new-menu .action-btn {
+  justify-content: flex-start;
+  min-width: 150px;
+}
+
+/* labeled action buttons (menu items) */
 .action-btn {
   display: inline-flex;
   align-items: center;
@@ -144,16 +214,6 @@ textarea::placeholder {
   transform: scale(0.96);
 }
 
-#btn-new-chat {
-  background: var(--grad);
-  color: #fff;
-  border-color: transparent;
-}
-
-#btn-new-chat:hover {
-  filter: brightness(1.12);
-}
-
 .list-empty {
   margin: 18px 10px;
   padding: 18px 14px;
@@ -169,6 +229,7 @@ textarea::placeholder {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex: 1;
   min-width: 0;
 }
 
@@ -178,6 +239,7 @@ textarea::placeholder {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  min-width: 0;
 }
 
 .conn-dot {

@@ -219,12 +219,16 @@ export function mountChatPane(): void {
     const mine = messagesEl.querySelectorAll('.msg-row.mine');
     for (const row of mine) {
       const key = (row as HTMLElement).dataset.key ?? '';
-      const id = Number(key.startsWith('m:') ? key.slice(2) : 0);
+      // Resolve the message from the store, not by parsing the DOM key: rows of
+      // optimistic sends keep a `t:<tempId>` key after ack, so id can't be
+      // derived from the key itself.
+      const storeMsg = chat.messages.find((m) => (m.tempId ? `t:${m.tempId}` : `m:${m.id}`) === key);
+      if (!storeMsg) continue;
       const ticks = row.querySelector<HTMLElement>('.msg-ticks');
-      if (!ticks || !id) continue;
+      if (!ticks) continue;
       if (row.classList.contains('pending')) ticks.textContent = '…';
       else if (row.classList.contains('failed')) ticks.textContent = '!';
-      else ticks.textContent = id > 0 && maxRead >= id ? '✓✓' : '✓';
+      else ticks.textContent = storeMsg.id > 0 && maxRead >= storeMsg.id ? '✓✓' : '✓';
     }
   }
 

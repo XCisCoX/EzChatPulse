@@ -15,13 +15,24 @@
       <div id="main-view" class="view hidden">
         <aside id="sidebar">
           <header id="sidebar-header">
-            <div id="me-chip"></div>
-            <div id="sidebar-actions">
-              <button id="btn-new-chat" class="action-btn" title="Start a new chat">✎ New chat</button>
-              <button id="btn-new-group" class="action-btn" title="Create a group">＋ New group</button>
-            </div>
+            <input
+              id="sidebar-search"
+              type="text"
+              placeholder="Search chats or users…"
+              maxlength="32"
+              autocomplete="off"
+              spellcheck="false"
+            />
           </header>
           <div id="chat-list"></div>
+          <footer id="sidebar-footer">
+            <div id="new-menu" class="hidden">
+              <button id="mi-new-chat" class="action-btn">✎ New chat</button>
+              <button id="mi-new-group" class="action-btn">＋ New group</button>
+            </div>
+            <button id="btn-new" class="fab-btn" title="New chat or group">＋</button>
+            <div id="me-chip"></div>
+          </footer>
         </aside>
         <section id="chat-pane">
           <header id="chat-header"></header>

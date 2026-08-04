@@ -24,6 +24,18 @@ export interface StoredFile {
 }
 
 /**
+ * multer/busboy decodes Content-Disposition filenames as latin1, so UTF-8
+ * filenames (Persian, Cyrillic, …) arrive mojibaked ("ØªÙ…"). Repair them:
+ * re-encode latin1 → bytes → UTF-8. Safe for ASCII (identity), and the
+ * U+FFFD check keeps already-correct names untouched.
+ */
+function decodeFilename(name: string): string {
+  if (!/[^\x00-\x7F]/.test(name)) return name; // pure ASCII — nothing to do
+  const decoded = Buffer.from(name, 'latin1').toString('utf8');
+  return decoded.includes('\uFFFD') ? name : decoded;
+}
+
+/**
  * Persist an uploaded file to disk (content-addressed by sha256) and record it.
  * Duplicate content is deduplicated to a single row + blob.
  */
@@ -37,6 +49,7 @@ export function storeUpload(
     throw new BadRequest(`File too large (max ${Math.floor(config.maxUploadBytes / 1024 / 1024)} MB)`);
   }
 
+  const name = decodeFilename(file.originalname);
   const sha256 = crypto.createHash('sha256').update(file.buffer).digest('hex');
 
   const existing = db.prepare('SELECT id, name, mime, size FROM files WHERE sha256 = ?').get(sha256) as
@@ -53,11 +66,11 @@ export function storeUpload(
 
   const info = db
     .prepare('INSERT INTO files (owner_id, name, mime, size, sha256, stored_path, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
-    .run(ownerId, file.originalname, file.mimetype, file.size, sha256, path.join(subdir, sha256), Date.now());
+    .run(ownerId, name, file.mimetype, file.size, sha256, path.join(subdir, sha256), Date.now());
 
   return {
     id: Number(info.lastInsertRowid),
-    name: file.originalname,
+    name,
     mime: file.mimetype,
     size: file.size,
     url: `/api/files/${info.lastInsertRowid}`,

@@ -1,7 +1,9 @@
 import { store } from '../store';
 import { avatarEl, formatTime } from './format';
 import { openCreateGroupModal, openNewChatModal } from './group';
-import type { UIChat, UIMessage } from '../types';
+import { api } from '../api';
+import { toast } from './toast';
+import type { UIChat, UIMessage, UserDTO } from '../types';
 
 function previewText(m: UIMessage | null): string {
   if (!m) return 'No messages yet';
@@ -13,9 +15,13 @@ function previewText(m: UIMessage | null): string {
 export function mountSidebar(onSelect: (chatId: number) => void): void {
   const list = document.querySelector('#chat-list')!;
   const meChip = document.querySelector('#me-chip')!;
-  const newGroupBtn = document.querySelector<HTMLButtonElement>('#btn-new-group')!;
-  const newChatBtn = document.querySelector<HTMLButtonElement>('#btn-new-chat')!;
+  const search = document.querySelector<HTMLInputElement>('#sidebar-search')!;
+  const newBtn = document.querySelector<HTMLButtonElement>('#btn-new')!;
+  const newMenu = document.querySelector<HTMLDivElement>('#new-menu')!;
+  const miNewChat = document.querySelector<HTMLButtonElement>('#mi-new-chat')!;
+  const miNewGroup = document.querySelector<HTMLButtonElement>('#mi-new-group')!;
   let lastKey = '';
+  let searching = false;
 
   function renderMe(): void {
     const session = store.state.session;
@@ -86,8 +92,7 @@ export function mountSidebar(onSelect: (chatId: number) => void): void {
     return el;
   }
 
-  function render(): void {
-    renderMe();
+  function renderChats(): void {
     const chats = store.sortedChats();
     // activeChatId is part of the key so the .active highlight moves on switch
     const key =
@@ -106,15 +111,120 @@ export function mountSidebar(onSelect: (chatId: number) => void): void {
     if (chats.length === 0) {
       const hint = document.createElement('div');
       hint.className = 'list-empty';
-      hint.textContent = 'No chats yet — tap “✎ New chat” to start';
+      hint.textContent = 'No chats yet — tap “＋” below to start one';
       list.appendChild(hint);
       return;
     }
     for (const chat of chats) list.appendChild(chatItem(chat));
   }
 
-  newGroupBtn.addEventListener('click', () => openCreateGroupModal());
-  newChatBtn.addEventListener('click', () => openNewChatModal());
-  store.subscribe(render);
-  render();
+  /** One-tap "start chat" row shown in search results for unknown users. */
+  function userResultRow(user: UserDTO): HTMLElement {
+    const row = document.createElement('div');
+    row.className = 'chat-item search-user';
+    row.appendChild(avatarEl(user.id, user.displayName, 46));
+    const body = document.createElement('div');
+    body.className = 'chat-item-body';
+    const top = document.createElement('div');
+    top.className = 'chat-item-top';
+    const name = document.createElement('span');
+    name.className = 'chat-item-name';
+    name.textContent = user.displayName;
+    const uname = document.createElement('span');
+    uname.className = 'chat-item-time';
+    uname.textContent = `@${user.username}`;
+    top.append(name, uname);
+    const bottom = document.createElement('div');
+    bottom.className = 'chat-item-bottom';
+    const prev = document.createElement('span');
+    prev.className = 'chat-item-preview';
+    prev.textContent = 'Start chat';
+    bottom.appendChild(prev);
+    body.append(top, bottom);
+    row.appendChild(body);
+    row.addEventListener('click', () => {
+      void (async () => {
+        try {
+          const { chatId } = await api.createPrivate(user.id);
+          search.value = '';
+          searching = false;
+          store.setActiveChat(chatId);
+        } catch (err) {
+          toast(err instanceof Error ? err.message : 'Failed to start chat', 'error');
+        }
+      })();
+    });
+    return row;
+  }
+
+  let searchDebounce: ReturnType<typeof setTimeout> | undefined;
+
+  function doSearch(q: string): void {
+    const me = store.state.session?.user.id;
+    const ql = q.trim().toLowerCase();
+    list.innerHTML = '';
+    if (!ql) {
+      searching = false;
+      renderChats();
+      return;
+    }
+    // chats matching the query (by title)
+    const chats = store.sortedChats().filter((c) => store.chatTitle(c).toLowerCase().includes(ql));
+    for (const c of chats) list.appendChild(chatItem(c));
+    // users matching the query that we don't already have a private chat with
+    void api
+      .users(q.trim())
+      .then(({ users }) => {
+        if (search.value.trim().toLowerCase() !== ql) return; // stale result
+        const have = new Set(
+          chats.filter((c) => c.type === 'private').flatMap((c) => c.members.map((m) => m.userId)),
+        );
+        for (const user of users) {
+          if (user.id === me || have.has(user.id)) continue;
+          list.appendChild(userResultRow(user));
+        }
+      })
+      .catch(() => {
+        /* search is best-effort */
+      });
+  }
+
+  search.addEventListener('input', () => {
+    const q = search.value;
+    if (!q.trim()) {
+      searching = false;
+      clearTimeout(searchDebounce);
+      renderChats();
+      return;
+    }
+    searching = true;
+    clearTimeout(searchDebounce);
+    searchDebounce = setTimeout(() => doSearch(q), 200);
+  });
+
+  // ── “＋” menu: new chat / new group ──────────────────────────────────
+  function toggleMenu(force?: boolean): void {
+    const show = force ?? newMenu.classList.contains('hidden');
+    newMenu.classList.toggle('hidden', !show);
+  }
+  newBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleMenu();
+  });
+  miNewChat.addEventListener('click', () => {
+    toggleMenu(false);
+    openNewChatModal();
+  });
+  miNewGroup.addEventListener('click', () => {
+    toggleMenu(false);
+    openCreateGroupModal();
+  });
+  document.addEventListener('click', () => toggleMenu(false));
+
+  store.subscribe(() => {
+    renderMe();
+    if (!searching) renderChats();
+  });
+  renderMe();
+  renderChats();
 }
