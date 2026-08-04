@@ -84,6 +84,7 @@ textarea::placeholder {
 
 #app {
   height: 100vh;
+  height: 100dvh; /* mobile browsers: don't extend under the URL/search bar */
   display: flex;
 }
 
@@ -92,9 +93,11 @@ textarea::placeholder {
   flex: 1;
   min-width: 0;
   height: 100vh;
+  height: 100dvh;
 }
 
 #sidebar {
+  position: relative;
   width: var(--sidebar-w);
   min-width: var(--sidebar-w);
   display: flex;
@@ -138,24 +141,27 @@ textarea::placeholder {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 12px;
+  padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px));
   border-top: 1px solid var(--border);
 }
 
-/* “＋” action: opens a small new-chat/new-group menu */
+/* “＋” floating action button — hovers over the chat list, above the profile */
 .fab-btn {
-  flex: none;
-  width: 44px;
-  height: 44px;
+  position: absolute;
+  right: 14px;
+  bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+  width: 48px;
+  height: 48px;
   border: none;
   border-radius: 50%;
   background: var(--grad);
   color: #fff;
-  font-size: 24px;
+  font-size: 26px;
   line-height: 1;
   cursor: pointer;
   box-shadow: 0 6px 20px rgba(139, 92, 246, 0.45);
   transition: transform 0.12s, filter 0.14s;
+  z-index: 5;
 }
 
 .fab-btn:hover {
@@ -169,8 +175,8 @@ textarea::placeholder {
 
 #new-menu {
   position: absolute;
-  bottom: 58px;
-  left: 12px;
+  right: 14px;
+  bottom: calc(134px + env(safe-area-inset-bottom, 0px));
   display: flex;
   flex-direction: column;
   gap: 4px;

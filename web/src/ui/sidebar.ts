@@ -194,6 +194,9 @@ export function mountSidebar(onSelect: (chatId: number) => void): void {
     if (!q.trim()) {
       searching = false;
       clearTimeout(searchDebounce);
+      // the list currently shows search results; lastKey still matches the
+      // pre-search render, so force a rebuild instead of early-returning
+      lastKey = '';
       renderChats();
       return;
     }
