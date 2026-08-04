@@ -20,6 +20,8 @@
 | CP-10 | Second tick (✓✓) missing during live chat (works after reload) | ⚠️ major | bug | ✅ verified | chat pane |
 | CP-11 | Sidebar header cramped — user name truncated (design: search top, profile bottom, + menu) | 🔸 minor | ux | ✅ verified | sidebar |
 | CP-12 | Persian filename uploaded as mojibake ('ØªÙ…') | 🔸 minor | bug | ✅ verified | uploads |
+| CP-13 | On phone, profile + button slip under Firefox's bottom search bar | 🔸 minor | bug | 🟢 fixed | layout / mobile |
+| CP-14 | Clearing the sidebar search does nothing (results stay stuck) | 🔸 minor | bug | ✅ verified | sidebar search |
 
 ---
 
@@ -168,6 +170,35 @@
   (identity for ASCII, U+FFFD guard keeps already-correct names). Test added
   with raw UTF-8 bytes spliced into the multipart header. (commit `900ff75`)
 - **Verified live:** upload through the CDN returns "تمرین سوم.pdf" intact.
+
+---
+
+## CP-13 — On phone, profile + button slip under Firefox's bottom search bar
+
+- **Reported:** Aug 5 (mobile Firefox). The sidebar footer ended up behind the
+  browser's bottom search bar.
+- **Status:** 🟢 fixed (needs phone retest) · **Type:** bug · **Severity:** 🔸 minor
+- **Root cause:** `height: 100vh` on mobile browsers extends behind the browser
+  chrome (URL/search bar).
+- **Fix:** `#app` / `#main-view` now use `100dvh` (dynamic viewport height, vh
+  fallback) + `env(safe-area-inset-bottom)` padding on the footer; the fixed
+  mobile chat pane got the same dvh treatment. (commit `d49f0a7`)
+
+## CP-14 — Clearing the sidebar search does nothing
+
+- **Reported:** Aug 5.
+- **Status:** ✅ verified · **Type:** bug · **Severity:** 🔸 minor
+- **Root cause:** `renderChats()` skips re-rendering when the render key is
+  unchanged; while searching, the list was replaced by results but `lastKey`
+  still matched, so clearing the input early-returned and left the results up.
+- **Fix:** on clear, reset `lastKey = ''` to force a rebuild. (commit `d49f0a7`)
+- **Verified live:** type → results → clear → chat list restored.
+
+## CP-11 follow-up (Aug 5): FAB moved to floating position
+
+The "+" button no longer sits in the footer row next to the profile — it now
+floats over the chat-list area, bottom-right, above the profile (Telegram-style),
+with the menu opening above it. Verified live (commit `d49f0a7`).
 
 ---
 
