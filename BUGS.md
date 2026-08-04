@@ -17,6 +17,9 @@
 | CP-7 | Selected-chat highlight doesn't restore on chat switch | 🔸 minor | bug | ✅ verified | sidebar / css |
 | CP-8 | Narrow screens split the pane when no chat is open | 🔸 minor | bug | 🟢 fixed | layout / css |
 | CP-9 | History loads newest-first on a fresh device (top msg = 26th, bottom = 1st) | ⚠️ major | bug | ✅ verified | history load |
+| CP-10 | Second tick (✓✓) missing during live chat (works after reload) | ⚠️ major | bug | ✅ verified | chat pane |
+| CP-11 | Sidebar header cramped — user name truncated (design: search top, profile bottom, + menu) | 🔸 minor | ux | ✅ verified | sidebar |
+| CP-12 | Persian filename uploaded as mojibake ('ØªÙ…') | 🔸 minor | bug | ✅ verified | uploads |
 
 ---
 
@@ -125,6 +128,46 @@
   - `web/src/ui/chat.ts` — `render()` L232–237
 - **Fix direction:** reverse-then-append (or iterate API order with prepend) —
   one reversal, not two; verify first-page load also scrolls to the newest.
+
+---
+
+## CP-10 — Second tick (✓✓) missing during live chat
+
+- **Reported:** Aug 4. Related to CP-1: with both parties in an open chat, the
+  second tick never appeared for either side — but appeared after a reload.
+- **Status:** ✅ verified · **Type:** bug · **Severity:** ⚠️ major
+- **Root cause:** rows of optimistic sends keep a `t:<tempId>` DOM key even
+  after ack (the store message retains `tempId`), and `refreshTicks` derived the
+  message id by parsing the DOM key — `t:` keys yielded id 0 and were skipped.
+  Reload rebuilt rows with `m:<id>` keys, so ticks worked only after reload.
+- **Fix:** `refreshTicks` now resolves the message from the store by key lookup
+  and uses `storeMsg.id`. (commit `900ff75`)
+- **Verified live:** Alice sends → Bob (connected) reads → Alice's tick flips to
+  ✓✓ immediately, no reload.
+
+## CP-11 — Sidebar header cramped (user name truncated)
+
+- **Reported:** Aug 4, with a design suggestion: search bar on top, profile at
+  the bottom, a "+" button above the profile opening a new-chat/new-group menu
+  (Telegram-style).
+- **Status:** ✅ verified · **Type:** ux · **Severity:** 🔸 minor
+- **Implemented** (commit `900ff75`): search bar on top (filters chats AND finds
+  users — one tap starts a chat), profile chip moved to a bottom footer,
+  circular "+" FAB opens a menu with "✎ New chat" / "＋ New group".
+- **Verified live:** layout + menu in a real browser.
+
+## CP-12 — Persian filename uploaded as mojibake
+
+- **Reported:** Aug 4. A PDF named "تمرین سوم.pdf" came back as
+  "ØªÙ…pdf" (UTF-8 bytes decoded as latin1).
+- **Status:** ✅ verified · **Type:** bug · **Severity:** 🔸 minor
+- **Root cause:** multer/busboy decodes Content-Disposition filenames as latin1;
+  the name was stored as-is. (Download headers already used RFC 5987
+  `filename*=UTF-8''`.)
+- **Fix:** `decodeFilename()` in `storeUpload` re-encodes latin1 → bytes → UTF-8
+  (identity for ASCII, U+FFFD guard keeps already-correct names). Test added
+  with raw UTF-8 bytes spliced into the multipart header. (commit `900ff75`)
+- **Verified live:** upload through the CDN returns "تمرین سوم.pdf" intact.
 
 ---
 
