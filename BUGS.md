@@ -226,10 +226,31 @@ From bugs-n-stuff.txt (not bugs; planned features):
 
 | Item | Notes |
 |------|-------|
+| ~~Message edit / delete~~ | ✅ DONE Aug 7 — see "Feature round 1" below |
 | Emoji panel | picker in the composer (needs a small emoji dataset + popover) |
-| Message edit / delete | edit: own messages, updated_at + "edited" marker; delete-for-me / delete-for-everyone |
 | Leave / delete group | leave = remove self + eviction events; delete = admin destroys chat |
 | User settings | display name, password change, maybe avatar later |
+
+### Feature round 1 — Aug 7: message edit + delete ✅
+
+Implemented end to end (commit `36dc3ae`), 55/55 tests, verified live in a
+real browser with a second WS client:
+
+- **Edit** (sender only, text messages): `msg.edit` WS op → `msg.edited`
+  broadcast to everyone; UI: tap/hover your message → ✎ → inline textarea
+  (Enter saves, Esc cancels) → "edited" marker next to the time.
+- **Delete for everyone** (sender or group admin): soft delete →
+  `deleted_at` tombstone ("This message was deleted") broadcast as
+  `msg.deleted {mode:'everyone'}`.
+- **Delete for me** (any member): per-user `message_hidden` table; message
+  disappears only for the actor (history + sidebar preview filtered), acked
+  locally, no broadcast.
+- Schema migration v2 (edited_at/deleted_at columns + message_hidden table),
+  applied cleanly to the live DB.
+- Tests: edit happy path + non-sender forbidden + can't edit deleted/media,
+  delete-everyone + non-sender forbidden, group-admin delete, delete-for-me
+  isolation. Also hardened the test helper: contexts now force-close client
+  sockets, so a failing test can never hang the suite again.
 
 Concerns (deferred, noted):
 - Registration is unguarded (anyone can sign up) — fine for now; later: invite
