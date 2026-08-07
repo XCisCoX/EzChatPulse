@@ -169,6 +169,10 @@ test('unread count reflects messages sent while offline; read resets it', async 
   assert.equal(chats.chats[0].lastMessage.text, 'msg 3');
   assert.equal(chats.chats[0].members.length, 2);
 
+  // Alice's own messages must NOT count as unread for her (CP-15)
+  const aliceChatsOwn = await (await authed('/api/chats', alice.token)).json();
+  assert.equal(aliceChatsOwn.chats[0].unread, 0, 'own messages are never unread');
+
   // Bob connects, reads, and alice gets the read event
   const wsB = await wsConnectAuthed(ctx.port, bob.token);
   wsB.send(JSON.stringify({ t: 'read', cid: chatId, msgId: chats.chats[0].lastMessage.id }));
