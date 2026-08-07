@@ -1,6 +1,6 @@
 import type { Db } from '../db.js';
-import { BadRequest, Forbidden } from '../errors.js';
-import { assertMember } from './membership.js';
+import { BadRequest, Forbidden, NotFound } from '../errors.js';
+import { assertMember, isAdmin } from './membership.js';
 
 export interface FileDTO {
   id: number;
@@ -19,6 +19,8 @@ export interface MessageDTO {
   file: FileDTO | null;
   replyTo: number | null;
   createdAt: number;
+  editedAt: number | null;
+  deletedAt: number | null;
 }
 
 interface MessageRow {
@@ -29,6 +31,8 @@ interface MessageRow {
   text: string | null;
   reply_to: number | null;
   created_at: number;
+  edited_at: number | null;
+  deleted_at: number | null;
   f_id: number | null;
   f_name: string | null;
   f_mime: string | null;
@@ -37,6 +41,7 @@ interface MessageRow {
 
 const MESSAGE_SELECT = `
   SELECT m.id, m.chat_id, m.sender_id, m.kind, m.text, m.reply_to, m.created_at,
+         m.edited_at, m.deleted_at,
          f.id AS f_id, f.name AS f_name, f.mime AS f_mime, f.size AS f_size
   FROM messages m
   LEFT JOIN files f ON f.id = m.file_id
@@ -51,15 +56,24 @@ function rowToDTO(row: MessageRow): MessageDTO {
     text: row.text,
     replyTo: row.reply_to,
     createdAt: row.created_at,
+    editedAt: row.edited_at,
+    deletedAt: row.deleted_at,
     file: row.f_id
       ? { id: row.f_id, name: row.f_name!, mime: row.f_mime!, size: row.f_size!, url: `/api/files/${row.f_id}` }
       : null,
   };
 }
 
-export function getMessage(db: Db, id: number): MessageDTO | null {
+/** Is the message hidden for this viewer (delete-for-me)? */
+function isHiddenFor(db: Db, msgId: number, viewerId: number): boolean {
+  return !!db.prepare('SELECT 1 FROM message_hidden WHERE message_id = ? AND user_id = ?').get(msgId, viewerId);
+}
+
+export function getMessage(db: Db, id: number, viewerId?: number): MessageDTO | null {
   const row = db.prepare(`${MESSAGE_SELECT} WHERE m.id = ?`).get(id) as MessageRow | undefined;
-  return row ? rowToDTO(row) : null;
+  if (!row) return null;
+  if (viewerId !== undefined && isHiddenFor(db, id, viewerId)) return null;
+  return rowToDTO(row);
 }
 
 export interface SendInput {
@@ -123,9 +137,62 @@ export function listMessages(db: Db, viewerId: number, chatId: number, before?: 
   assertMember(db, chatId, viewerId);
   const capped = Math.min(Math.max(Math.floor(limit), 1), 100);
   const rows = db
-    .prepare(`${MESSAGE_SELECT} WHERE m.chat_id = ? AND (? IS NULL OR m.id < ?) ORDER BY m.id DESC LIMIT ?`)
-    .all(chatId, before ?? null, before ?? null, capped) as MessageRow[];
+    .prepare(
+      `${MESSAGE_SELECT}
+       WHERE m.chat_id = ? AND (? IS NULL OR m.id < ?)
+         AND NOT EXISTS (SELECT 1 FROM message_hidden h WHERE h.message_id = m.id AND h.user_id = ?)
+       ORDER BY m.id DESC LIMIT ?`,
+    )
+    .all(chatId, before ?? null, before ?? null, viewerId, capped) as MessageRow[];
   return rows.map(rowToDTO);
+}
+
+/** Load a message and verify it belongs to the chat (throws NotFound otherwise). */
+function getChatMessage(db: Db, chatId: number, msgId: number): MessageRow {
+  const row = db.prepare(`${MESSAGE_SELECT} WHERE m.id = ? AND m.chat_id = ?`).get(msgId, chatId) as
+    | MessageRow
+    | undefined;
+  if (!row) throw new NotFound('Message not found');
+  return row;
+}
+
+/** Edit a message's text (sender only, text messages only). Returns the updated message. */
+export function editMessage(db: Db, actorId: number, chatId: number, msgId: number, text: string): MessageDTO {
+  assertMember(db, chatId, actorId);
+  const row = getChatMessage(db, chatId, msgId);
+  if (row.deleted_at) throw new BadRequest('Cannot edit a deleted message');
+  if (row.sender_id !== actorId) throw new Forbidden('Only the sender can edit a message');
+  if (row.kind !== 'text') throw new BadRequest('Only text messages can be edited');
+  const clean = text.trim();
+  if (!clean) throw new BadRequest('Message text is empty');
+  if (clean.length > 4096) throw new BadRequest('Message too long (max 4096 characters)');
+  db.prepare('UPDATE messages SET text = ?, edited_at = ? WHERE id = ?').run(clean, Date.now(), msgId);
+  return getMessage(db, msgId)!;
+}
+
+/**
+ * Delete for everyone (soft delete → tombstone). Allowed for the sender, or a
+ * group admin deleting any message in their group.
+ */
+export function deleteMessageForEveryone(db: Db, actorId: number, chatId: number, msgId: number): void {
+  assertMember(db, chatId, actorId);
+  const row = getChatMessage(db, chatId, msgId);
+  if (row.deleted_at) return; // already deleted — idempotent
+  const chat = db.prepare('SELECT type FROM chats WHERE id = ?').get(chatId) as { type: string } | undefined;
+  const isSender = row.sender_id === actorId;
+  const isGroupAdmin = chat?.type === 'group' && isAdmin(db, chatId, actorId);
+  if (!isSender && !isGroupAdmin) throw new Forbidden('Only the sender or a group admin can delete for everyone');
+  db.prepare('UPDATE messages SET deleted_at = ? WHERE id = ?').run(Date.now(), msgId);
+}
+
+/** Delete for me: the message stays for everyone else, hidden only for the actor. */
+export function deleteMessageForMe(db: Db, actorId: number, chatId: number, msgId: number): void {
+  assertMember(db, chatId, actorId);
+  getChatMessage(db, chatId, msgId); // must exist in this chat
+  db.prepare(
+    `INSERT INTO message_hidden (user_id, message_id, hidden_at) VALUES (?, ?, ?)
+     ON CONFLICT(user_id, message_id) DO NOTHING`,
+  ).run(actorId, msgId, Date.now());
 }
 
 /** Advance the user's read cursor (monotonic — never goes backwards). */

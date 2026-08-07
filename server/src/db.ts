@@ -7,6 +7,25 @@ export type Db = Database.Database;
 
 const schemaSql = fs.readFileSync(path.join(import.meta.dirname, 'schema.sql'), 'utf8');
 
+const migrations: Array<{ version: number; up: (db: Db) => void }> = [
+  {
+    // v2 — message edit/delete: edited_at + deleted_at on messages, per-user hiding
+    version: 2,
+    up(db) {
+      const cols = db.prepare('PRAGMA table_info(messages)').all() as Array<{ name: string }>;
+      const has = (n: string) => cols.some((c) => c.name === n);
+      if (!has('edited_at')) db.exec('ALTER TABLE messages ADD COLUMN edited_at INTEGER');
+      if (!has('deleted_at')) db.exec('ALTER TABLE messages ADD COLUMN deleted_at INTEGER');
+      db.exec(`CREATE TABLE IF NOT EXISTS message_hidden (
+        user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+        hidden_at  INTEGER NOT NULL,
+        PRIMARY KEY (user_id, message_id)
+      )`);
+    },
+  },
+];
+
 function runMigrations(db: Db): void {
   db.exec(`CREATE TABLE IF NOT EXISTS schema_migrations (
     version INTEGER PRIMARY KEY,
@@ -18,7 +37,13 @@ function runMigrations(db: Db): void {
   if (row.v === null) {
     db.prepare('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)').run(1, Date.now());
   }
-  // Future migrations: append {version: n, up(db)} entries here, applied in order.
+  const current = (db.prepare('SELECT MAX(version) AS v FROM schema_migrations').get() as { v: number | null }).v ?? 0;
+  for (const m of migrations) {
+    if (m.version > current) {
+      m.up(db);
+      db.prepare('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)').run(m.version, Date.now());
+    }
+  }
 }
 
 /** Open a fresh database connection (file path or ':memory:'). */

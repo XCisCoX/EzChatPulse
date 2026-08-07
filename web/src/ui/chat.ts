@@ -96,6 +96,12 @@ export function mountChatPane(): void {
     const content = document.createElement('div');
     content.className = 'msg-content';
     content.setAttribute('dir', 'auto'); // RTL-aware bubbles (Persian etc.)
+    if (msg.deletedAt) {
+      content.classList.add('msg-deleted');
+      content.removeAttribute('dir');
+      content.textContent = 'This message was deleted';
+      return content;
+    }
     if (msg.kind === 'text') {
       content.textContent = msg.text ?? '';
     } else if (msg.kind === 'image' && msg.file) {
@@ -191,6 +197,12 @@ export function mountChatPane(): void {
     time.className = 'msg-time';
     time.textContent = formatTime(msg.createdAt);
     meta.appendChild(time);
+    if (msg.editedAt) {
+      const edited = document.createElement('span');
+      edited.className = 'msg-edited';
+      edited.textContent = 'edited';
+      meta.appendChild(edited);
+    }
     if (mine) {
       const ticks = document.createElement('span');
       ticks.className = 'msg-ticks';
@@ -200,6 +212,37 @@ export function mountChatPane(): void {
     }
     bubble.appendChild(meta);
     row.appendChild(bubble);
+
+    // edit/delete actions for own, delivered, non-deleted messages
+    if (mine && !msg.deletedAt && !msg.pending) {
+      const actions = document.createElement('div');
+      actions.className = 'msg-actions';
+      const editBtn = document.createElement('button');
+      editBtn.className = 'msg-action-btn';
+      editBtn.textContent = '✎';
+      editBtn.title = 'Edit';
+      editBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        beginEdit(chat, msg, row);
+      });
+      const delBtn = document.createElement('button');
+      delBtn.className = 'msg-action-btn';
+      delBtn.textContent = '🗑';
+      delBtn.title = 'Delete';
+      delBtn.addEventListener('click', (e) => showDeleteMenu(chat, msg, row, e));
+      actions.append(editBtn, delBtn);
+      row.appendChild(actions);
+
+      // tap (mobile) / click toggles the actions; only one open at a time
+      row.addEventListener('click', () => {
+        if (msg.failed || editingKey) return;
+        const wasOpen = row.classList.contains('show-actions');
+        messagesEl.querySelectorAll<HTMLElement>('.msg-row.show-actions').forEach((r) => r.classList.remove('show-actions'));
+        if (!wasOpen) row.classList.add('show-actions');
+      });
+    }
+
+    row.dataset.rev = String(msg.rev ?? 0);
 
     if (msg.failed) {
       row.addEventListener('click', () => {
@@ -230,6 +273,93 @@ export function mountChatPane(): void {
       else if (row.classList.contains('failed')) ticks.textContent = '!';
       else ticks.textContent = storeMsg.id > 0 && maxRead >= storeMsg.id ? '✓✓' : '✓';
     }
+  }
+
+  // ── edit & delete ─────────────────────────────────────────────────────
+  let editingKey: string | null = null;
+
+  /** Rebuild one row from its store message (used to cancel an edit). */
+  function rebuildRow(chat: UIChat, msg: UIMessage): void {
+    const el = messagesEl.querySelector<HTMLElement>(`.msg-row[data-key="${CSS.escape(keyOf(msg))}"]`);
+    if (!el) return;
+    el.replaceWith(makeMessageNode(chat, msg));
+  }
+
+  function beginEdit(chat: UIChat, msg: UIMessage, row: HTMLElement): void {
+    const bubble = row.querySelector<HTMLElement>('.msg-bubble');
+    if (!bubble) return;
+    editingKey = keyOf(msg);
+    messagesEl.querySelectorAll<HTMLElement>('.msg-row.show-actions').forEach((r) => r.classList.remove('show-actions'));
+    bubble.innerHTML = '';
+    const ta = document.createElement('textarea');
+    ta.className = 'edit-input';
+    ta.value = msg.text ?? '';
+    ta.maxLength = 4096;
+    ta.dir = 'auto';
+    const bar = document.createElement('div');
+    bar.className = 'edit-bar';
+    const save = document.createElement('button');
+    save.className = 'edit-save';
+    save.textContent = 'Save';
+    const cancel = document.createElement('button');
+    cancel.className = 'edit-cancel';
+    cancel.textContent = 'Cancel';
+    bar.append(save, cancel);
+    bubble.append(ta, bar);
+    ta.focus();
+    ta.setSelectionRange(ta.value.length, ta.value.length);
+    const finish = (): void => {
+      editingKey = null;
+    };
+    save.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const text = ta.value.trim();
+      if (!text) return;
+      finish();
+      socket.send({ t: 'msg.edit', cid: chat.id, msgId: msg.id, text });
+    });
+    cancel.addEventListener('click', (e) => {
+      e.stopPropagation();
+      finish();
+      rebuildRow(chat, msg);
+    });
+    ta.addEventListener('keydown', (e) => {
+      e.stopPropagation();
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        const text = ta.value.trim();
+        if (!text) return;
+        finish();
+        socket.send({ t: 'msg.edit', cid: chat.id, msgId: msg.id, text });
+      } else if (e.key === 'Escape') {
+        finish();
+        rebuildRow(chat, msg);
+      }
+    });
+  }
+
+  function showDeleteMenu(chat: UIChat, msg: UIMessage, row: HTMLElement, e: Event): void {
+    e.stopPropagation();
+    messagesEl.querySelector('.delete-menu')?.remove();
+    const menu = document.createElement('div');
+    menu.className = 'delete-menu';
+    const meBtn = document.createElement('button');
+    meBtn.textContent = 'Delete for me';
+    const allBtn = document.createElement('button');
+    allBtn.textContent = 'Delete for everyone';
+    const close = (): void => menu.remove();
+    meBtn.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      close();
+      socket.send({ t: 'msg.delete', cid: chat.id, msgId: msg.id, mode: 'me' });
+    });
+    allBtn.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      close();
+      socket.send({ t: 'msg.delete', cid: chat.id, msgId: msg.id, mode: 'everyone' });
+    });
+    menu.append(meBtn, allBtn);
+    row.appendChild(menu);
   }
 
   // ── rendering ─────────────────────────────────────────────────────────
@@ -495,21 +625,21 @@ export function mountChatPane(): void {
         appended++;
       }
     }
-    // reconcile existing nodes whose state changed (pending→acked, failed→resent, text update)
+    // reconcile existing rows: remove gone messages (delete-for-me), rebuild
+    // rows whose store message changed (ack, edit, delete-for-everyone)
     for (const el of messagesEl.querySelectorAll<HTMLElement>('.msg-row')) {
       const key = el.dataset.key ?? '';
       const storeMsg = chat.messages.find((m) => keyOf(m) === key);
-      if (!storeMsg) continue;
+      if (!storeMsg) {
+        el.remove();
+        continue;
+      }
+      const revChanged = Number(el.dataset.rev ?? 0) !== (storeMsg.rev ?? 0);
       const stateChanged =
         el.classList.contains('pending') !== !!storeMsg.pending ||
         el.classList.contains('failed') !== !!storeMsg.failed;
-      if (stateChanged) {
-        const fresh = makeMessageNode(chat, storeMsg);
-        const oldBubble = el.querySelector('.msg-bubble');
-        const newBubble = fresh.querySelector('.msg-bubble');
-        if (oldBubble && newBubble) el.replaceChild(newBubble, oldBubble);
-        el.classList.toggle('pending', !!storeMsg.pending);
-        el.classList.toggle('failed', !!storeMsg.failed);
+      if (revChanged || stateChanged) {
+        el.replaceWith(makeMessageNode(chat, storeMsg));
       }
     }
     // follow new messages only when they were APPENDED and the user is at the

@@ -117,6 +117,26 @@ class Store {
     }
   }
 
+  /** Apply a server-driven mutation (edit, delete-for-everyone) by message id. */
+  updateMessage(chatId: number, patch: Partial<UIMessage> & { id: number }): void {
+    const chat = this.state.chats.get(chatId);
+    if (!chat) return;
+    const idx = chat.messages.findIndex((m) => m.id === patch.id);
+    if (idx < 0) return;
+    const prev = chat.messages[idx]!;
+    chat.messages[idx] = { ...prev, ...patch, rev: (prev.rev ?? 0) + 1 };
+    this.notify();
+  }
+
+  /** Remove a message entirely (delete-for-me). */
+  removeMessage(chatId: number, msgId: number): void {
+    const chat = this.state.chats.get(chatId);
+    if (!chat) return;
+    const idx = chat.messages.findIndex((m) => m.id === msgId);
+    if (idx >= 0) chat.messages.splice(idx, 1);
+    this.notify();
+  }
+
   setTyping(chatId: number, userId: number, isTyping: boolean): void {
     const chat = this.state.chats.get(chatId);
     if (!chat) return;

@@ -5,7 +5,7 @@ import { getDb } from '../db.js';
 import { register, unregister, isOnline, broadcastToChat } from './hub.js';
 import { scheduleLastSeen, announceOnline, announceOffline } from '../presence.js';
 import { handleTyping } from './typing.js';
-import { sendMessage, markRead } from '../services/messages.js';
+import { sendMessage, markRead, editMessage, deleteMessageForEveryone, deleteMessageForMe } from '../services/messages.js';
 import { AppError } from '../errors.js';
 import { rateLimit } from '../rate-limit.js';
 
@@ -68,6 +68,12 @@ export function handleConnection(raw: WebSocket): void {
       case 'msg.send':
         handleSend(ws, msg);
         break;
+      case 'msg.edit':
+        handleEdit(ws, msg);
+        break;
+      case 'msg.delete':
+        handleDelete(ws, msg);
+        break;
       case 'read':
         handleRead(ws, msg);
         break;
@@ -125,6 +131,52 @@ function handleSend(ws: ExtSocket, msg: Record<string, unknown>): void {
     ws.send(JSON.stringify({ t: 'msg.ack', tempId: result.tempId, msg: result.msg }));
     // Other online members: deliver the message
     broadcastToChat(result.msg.chatId, { t: 'msg.new', msg: result.msg }, ws.userId);
+  } catch (err) {
+    sendWsError(ws, err);
+  }
+}
+
+function handleEdit(ws: ExtSocket, msg: Record<string, unknown>): void {
+  const cid = Number(msg.cid);
+  const msgId = Number(msg.msgId);
+  if (!Number.isInteger(cid) || !Number.isInteger(msgId)) {
+    sendError(ws, 'BAD_REQUEST', 'cid and msgId must be integers');
+    return;
+  }
+  if (typeof msg.text !== 'string') {
+    sendError(ws, 'BAD_REQUEST', 'text is required');
+    return;
+  }
+  if (!rateLimit(`send:${ws.userId}`, 30, 1000)) {
+    sendError(ws, 'RATE_LIMITED', 'Sending too fast — slow down');
+    return;
+  }
+  try {
+    const updated = editMessage(getDb(), ws.userId!, cid, msgId, msg.text);
+    // everyone (including the sender) gets the updated message — idempotent by id
+    broadcastToChat(cid, { t: 'msg.edited', msg: updated });
+  } catch (err) {
+    sendWsError(ws, err);
+  }
+}
+
+function handleDelete(ws: ExtSocket, msg: Record<string, unknown>): void {
+  const cid = Number(msg.cid);
+  const msgId = Number(msg.msgId);
+  const mode = msg.mode === 'everyone' ? 'everyone' : 'me';
+  if (!Number.isInteger(cid) || !Number.isInteger(msgId)) {
+    sendError(ws, 'BAD_REQUEST', 'cid and msgId must be integers');
+    return;
+  }
+  try {
+    if (mode === 'everyone') {
+      deleteMessageForEveryone(getDb(), ws.userId!, cid, msgId);
+      broadcastToChat(cid, { t: 'msg.deleted', cid, msgId, mode: 'everyone' });
+    } else {
+      deleteMessageForMe(getDb(), ws.userId!, cid, msgId);
+      // affects only the actor — acknowledge, no broadcast
+      ws.send(JSON.stringify({ t: 'msg.deleted', cid, msgId, mode: 'me' }));
+    }
   } catch (err) {
     sendWsError(ws, err);
   }

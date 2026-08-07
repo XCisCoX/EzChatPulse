@@ -33,6 +33,8 @@ export interface MessageDTO {
   file: FileDTO | null;
   replyTo: number | null;
   createdAt: number;
+  editedAt?: number | null;
+  deletedAt?: number | null;
 }
 
 export interface ChatSummary {
@@ -55,6 +57,8 @@ export interface UIMessage extends MessageDTO {
   tempId?: string;
   pending?: boolean;
   failed?: boolean;
+  /** bumped on every server-driven mutation (edit/delete) so the DOM can rebuild */
+  rev?: number;
 }
 
 export interface UIChat extends Omit<ChatDTO, 'readBy'> {

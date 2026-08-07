@@ -15,3 +15,10 @@ export function memberIds(db: Db, chatId: number): number[] {
   }>;
   return rows.map((r) => r.user_id);
 }
+
+export function isAdmin(db: Db, chatId: number, userId: number): boolean {
+  const row = db.prepare('SELECT role FROM chat_members WHERE chat_id = ? AND user_id = ?').get(chatId, userId) as
+    | { role: string }
+    | undefined;
+  return row?.role === 'admin';
+}

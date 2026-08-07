@@ -196,7 +196,7 @@ export function getChat(db: Db, chatId: number, viewerId: number): ChatDTO | nul
     name: row.name,
     createdAt: row.created_at,
     unread: row.unread,
-    lastMessage: row.last_msg_id ? getMessage(db, row.last_msg_id) : null,
+    lastMessage: row.last_msg_id ? getMessage(db, row.last_msg_id, viewerId) : null,
     members: listMembers(db, chatId),
     readBy: listReadState(db, chatId),
   };
@@ -249,7 +249,7 @@ export function listChats(db: Db, userId: number): ChatDTO[] {
     name: r.name,
     createdAt: r.created_at,
     unread: r.unread,
-    lastMessage: r.last_msg_id ? getMessage(db, r.last_msg_id) : null,
+    lastMessage: r.last_msg_id ? getMessage(db, r.last_msg_id, userId) : null,
     members: listMembers(db, r.id),
     readBy: listReadState(db, r.id),
   }));

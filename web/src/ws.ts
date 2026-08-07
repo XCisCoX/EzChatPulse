@@ -50,6 +50,19 @@ class ChatSocket {
         break;
       }
 
+      case 'msg.edited':
+        store.updateMessage(msg.msg.chatId, msg.msg);
+        break;
+
+      case 'msg.deleted':
+        if (msg.mode === 'me') {
+          store.removeMessage(msg.cid, msg.msgId);
+        } else {
+          // everyone: mark as deleted → the pane renders the tombstone
+          store.updateMessage(msg.cid, { id: msg.msgId, deletedAt: Date.now() });
+        }
+        break;
+
       case 'msg.new': {
         const chat = store.state.chats.get(msg.msg.chatId);
         const isActive = store.state.activeChatId === msg.msg.chatId;
@@ -97,6 +110,7 @@ class ChatSocket {
 
       case 'error':
         console.warn('server ws error:', msg.code, msg.message);
+        void import('./ui/toast').then(({ toast }) => toast(msg.message ?? 'Something went wrong', 'error'));
         break;
     }
   }

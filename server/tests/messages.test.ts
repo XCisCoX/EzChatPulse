@@ -254,3 +254,161 @@ test('findOrCreatePrivate is idempotent', async () => {
   const chats = await (await authed('/api/chats', alice.token)).json();
   assert.equal(chats.chats.length, 1, 'no duplicate chat rows');
 });
+
+// ── Message edit & delete ───────────────────────────────────────────────
+
+async function createGroup(token: string, name: string, userIds: number[]): Promise<number> {
+  const res = await authed('/api/chats', token, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ type: 'group', name, userIds }),
+  });
+  return ((await res.json()) as any).chatId as number;
+}
+
+test('edit: sender updates text, both sides get msg.edited with editedAt', async () => {
+  const alice = await registerUser(ctx, 'alice', 'Alice', 'password123');
+  const bob = await registerUser(ctx, 'bob', 'Bob', 'password123');
+  const chatId = await createPrivateChat(alice.token, bob.user.id);
+
+  const wsA = await wsConnectAuthed(ctx.port, alice.token);
+  const wsB = await wsConnectAuthed(ctx.port, bob.token);
+
+  wsA.send(JSON.stringify({ t: 'msg.send', cid: chatId, tempId: 't1', kind: 'text', text: 'original' }));
+  const ack = await waitForMessage(wsA, (m) => m.t === 'msg.ack');
+  const msgId = ack.msg.id;
+  await waitForMessage(wsB, (m) => m.t === 'msg.new' && m.msg.id === msgId);
+
+  // Bob (not the sender) cannot edit
+  wsB.send(JSON.stringify({ t: 'msg.edit', cid: chatId, msgId, text: 'hijack' }));
+  const errB = await waitForMessage(wsB, (m) => m.t === 'error');
+  assert.equal(errB.code, 'FORBIDDEN');
+
+  // Alice edits → both sides get msg.edited with the new text + editedAt
+  wsA.send(JSON.stringify({ t: 'msg.edit', cid: chatId, msgId, text: 'edited text' }));
+  const evtA = await waitForMessage(wsA, (m) => m.t === 'msg.edited' && m.msg.id === msgId);
+  const evtB = await waitForMessage(wsB, (m) => m.t === 'msg.edited' && m.msg.id === msgId);
+  assert.equal(evtA.msg.text, 'edited text');
+  assert.equal(evtB.msg.text, 'edited text');
+  assert.ok(evtA.msg.editedAt > 0, 'editedAt must be set');
+  assert.equal(evtA.msg.deletedAt, null);
+
+  // history reflects the edit
+  const hist = await (await authed(`/api/chats/${chatId}/messages`, alice.token)).json();
+  assert.equal(hist.messages[0].text, 'edited text');
+  assert.ok(hist.messages[0].editedAt > 0);
+
+  wsA.close();
+  wsB.close();
+});
+
+test('edit: cannot edit a deleted message or a media message', async () => {
+  const alice = await registerUser(ctx, 'alice', 'Alice', 'password123');
+  const bob = await registerUser(ctx, 'bob', 'Bob', 'password123');
+  const chatId = await createPrivateChat(alice.token, bob.user.id);
+  const wsA = await wsConnectAuthed(ctx.port, alice.token);
+  const wsB = await wsConnectAuthed(ctx.port, bob.token);
+
+  wsA.send(JSON.stringify({ t: 'msg.send', cid: chatId, tempId: 't1', kind: 'text', text: 'doomed' }));
+  const msgId = (await waitForMessage(wsA, (m) => m.t === 'msg.ack')).msg.id;
+  await waitForMessage(wsB, (m) => m.t === 'msg.new' && m.msg.id === msgId);
+
+  // delete for everyone, then try to edit
+  wsA.send(JSON.stringify({ t: 'msg.delete', cid: chatId, msgId, mode: 'everyone' }));
+  await waitForMessage(wsB, (m) => m.t === 'msg.deleted' && m.msgId === msgId);
+  wsA.send(JSON.stringify({ t: 'msg.edit', cid: chatId, msgId, text: 'zombie' }));
+  const err = await waitForMessage(wsA, (m) => m.t === 'error');
+  assert.equal(err.code, 'BAD_REQUEST');
+
+  wsA.close();
+  wsB.close();
+});
+
+test('delete for everyone: tombstone broadcast; non-sender forbidden', async () => {
+  const alice = await registerUser(ctx, 'alice', 'Alice', 'password123');
+  const bob = await registerUser(ctx, 'bob', 'Bob', 'password123');
+  const chatId = await createPrivateChat(alice.token, bob.user.id);
+
+  const wsA = await wsConnectAuthed(ctx.port, alice.token);
+  const wsB = await wsConnectAuthed(ctx.port, bob.token);
+
+  wsA.send(JSON.stringify({ t: 'msg.send', cid: chatId, tempId: 't1', kind: 'text', text: 'delete me' }));
+  const msgId = (await waitForMessage(wsA, (m) => m.t === 'msg.ack')).msg.id;
+  await waitForMessage(wsB, (m) => m.t === 'msg.new' && m.msg.id === msgId);
+
+  // Bob is not the sender → FORBIDDEN
+  wsB.send(JSON.stringify({ t: 'msg.delete', cid: chatId, msgId, mode: 'everyone' }));
+  const errB = await waitForMessage(wsB, (m) => m.t === 'error');
+  assert.equal(errB.code, 'FORBIDDEN');
+
+  // Alice deletes → both sides get msg.deleted; history shows the tombstone
+  wsA.send(JSON.stringify({ t: 'msg.delete', cid: chatId, msgId, mode: 'everyone' }));
+  const delA = await waitForMessage(wsA, (m) => m.t === 'msg.deleted' && m.msgId === msgId);
+  const delB = await waitForMessage(wsB, (m) => m.t === 'msg.deleted' && m.msgId === msgId);
+  assert.equal(delA.mode, 'everyone');
+  assert.equal(delB.mode, 'everyone');
+
+  const hist = await (await authed(`/api/chats/${chatId}/messages`, alice.token)).json();
+  assert.ok(hist.messages[0].deletedAt > 0, 'deleted_at must be set');
+
+  wsA.close();
+  wsB.close();
+});
+
+test('group admin can delete any member message for everyone', async () => {
+  const alice = await registerUser(ctx, 'alice', 'Alice', 'password123');
+  const bob = await registerUser(ctx, 'bob', 'Bob', 'password123');
+  const carol = await registerUser(ctx, 'carol', 'Carol', 'password123');
+  const chatId = await createGroup(alice.token, 'Team', [bob.user.id, carol.user.id]);
+
+  const wsA = await wsConnectAuthed(ctx.port, alice.token);
+  const wsB = await wsConnectAuthed(ctx.port, bob.token);
+  const wsC = await wsConnectAuthed(ctx.port, carol.token);
+
+  // Bob sends; Carol (non-admin) tries to delete it first → FORBIDDEN
+  wsB.send(JSON.stringify({ t: 'msg.send', cid: chatId, tempId: 't1', kind: 'text', text: 'admin target' }));
+  const msgId = (await waitForMessage(wsB, (m) => m.t === 'msg.ack')).msg.id;
+  await waitForMessage(wsC, (m) => m.t === 'msg.new' && m.msg.id === msgId);
+
+  wsC.send(JSON.stringify({ t: 'msg.delete', cid: chatId, msgId, mode: 'everyone' }));
+  const errC = await waitForMessage(wsC, (m) => m.t === 'error');
+  assert.equal(errC.code, 'FORBIDDEN');
+
+  // admin Alice deletes Bob's message → Carol sees the tombstone
+  wsA.send(JSON.stringify({ t: 'msg.delete', cid: chatId, msgId, mode: 'everyone' }));
+  const delC = await waitForMessage(wsC, (m) => m.t === 'msg.deleted' && m.msgId === msgId);
+  assert.equal(delC.mode, 'everyone');
+
+  wsA.close();
+  wsB.close();
+  wsC.close();
+});
+
+test('delete for me: hidden only for the actor, others still see it', async () => {
+  const alice = await registerUser(ctx, 'alice', 'Alice', 'password123');
+  const bob = await registerUser(ctx, 'bob', 'Bob', 'password123');
+  const chatId = await createPrivateChat(alice.token, bob.user.id);
+
+  const wsA = await wsConnectAuthed(ctx.port, alice.token);
+  const wsB = await wsConnectAuthed(ctx.port, bob.token);
+
+  wsA.send(JSON.stringify({ t: 'msg.send', cid: chatId, tempId: 't1', kind: 'text', text: 'hide from bob' }));
+  const msgId = (await waitForMessage(wsA, (m) => m.t === 'msg.ack')).msg.id;
+  await waitForMessage(wsB, (m) => m.t === 'msg.new' && m.msg.id === msgId);
+
+  // Bob deletes for me → ack only to Bob, no broadcast
+  wsB.send(JSON.stringify({ t: 'msg.delete', cid: chatId, msgId, mode: 'me' }));
+  const delB = await waitForMessage(wsB, (m) => m.t === 'msg.deleted' && m.msgId === msgId);
+  assert.equal(delB.mode, 'me');
+  await sleep(150);
+  assert.ok(!wsA.messages.some((m) => m.t === 'msg.deleted'), 'no broadcast for delete-for-me');
+
+  // Bob's history no longer contains it; Alice's still does
+  const histB = await (await authed(`/api/chats/${chatId}/messages`, bob.token)).json();
+  assert.ok(!histB.messages.some((m: any) => m.id === msgId), 'hidden for the actor');
+  const histA = await (await authed(`/api/chats/${chatId}/messages`, alice.token)).json();
+  assert.ok(histA.messages.some((m: any) => m.id === msgId), 'still visible for others');
+
+  wsA.close();
+  wsB.close();
+});

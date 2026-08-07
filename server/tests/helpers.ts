@@ -58,7 +58,11 @@ export function createTestContext(): Promise<TestContext> {
         db,
         port: addr.port,
         close: async () => {
+          // force-kill any client sockets a failing test left open, otherwise
+          // httpServer.close() waits on them forever and the suite hangs
+          for (const client of wss.clients) client.terminate();
           wss.close();
+          httpServer.closeAllConnections?.();
           await new Promise<void>((r) => httpServer.close(() => r()));
           setTestDb(null);
           db.close();

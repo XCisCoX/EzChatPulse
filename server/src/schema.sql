@@ -48,10 +48,20 @@ CREATE TABLE IF NOT EXISTS messages (
   text       TEXT,
   file_id    INTEGER REFERENCES files(id),
   reply_to   INTEGER REFERENCES messages(id),
-  created_at INTEGER NOT NULL
+  created_at INTEGER NOT NULL,
+  edited_at  INTEGER,   -- set when the sender edits the message
+  deleted_at INTEGER    -- set for delete-for-everyone (soft delete → tombstone)
 );
 -- keyset pagination: per-chat, newest first
 CREATE INDEX IF NOT EXISTS idx_messages_chat ON messages(chat_id, id DESC);
+
+-- delete-for-me: per-user hidden messages (row kept for others)
+CREATE TABLE IF NOT EXISTS message_hidden (
+  user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+  hidden_at  INTEGER NOT NULL,
+  PRIMARY KEY (user_id, message_id)
+);
 
 CREATE TABLE IF NOT EXISTS read_state (
   chat_id              INTEGER NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
