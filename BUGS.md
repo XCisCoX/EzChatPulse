@@ -22,6 +22,7 @@
 | CP-12 | Persian filename uploaded as mojibake ('ØªÙ…') | 🔸 minor | bug | ✅ verified | uploads |
 | CP-13 | On phone, profile + button slip under Firefox's bottom search bar | 🔸 minor | bug | 🟢 fixed | layout / mobile |
 | CP-14 | Clearing the sidebar search does nothing (results stay stuck) | 🔸 minor | bug | ✅ verified | sidebar search |
+| CP-15 | False unread: your own message shows as '1' after refresh | 🔸 minor | bug | ✅ verified | unread counts |
 
 ---
 
@@ -201,6 +202,40 @@ floats over the chat-list area, bottom-right, above the profile (Telegram-style)
 with the menu opening above it. Verified live (commit `d49f0a7`).
 
 ---
+
+## CP-15 — False unread: your own message shows as '1' after refresh
+
+- **Reported:** Aug 7. Send a message in a chat, refresh → the chat shows an
+  unread badge for your own message.
+- **Status:** ✅ verified · **Type:** bug · **Severity:** 🔸 minor
+- **Root cause:** the unread count SQL counted every message above the viewer's
+  read cursor regardless of sender — your own sends sit above your cursor
+  (sending doesn't advance it), so they counted as unread.
+- **Fix:** unread now excludes the viewer's own messages
+  (`AND m.sender_id != ?` in the count subqueries of both `getChat` and
+  `listChats`). Test added: sender sees unread 0, recipient sees unread N.
+  (commit `56a1901`)
+- **Verified live:** own message → unread 0; same message from the recipient's
+  view → unread 1.
+
+---
+
+## Feature backlog (Aug 7) — next iteration candidates
+
+From bugs-n-stuff.txt (not bugs; planned features):
+
+| Item | Notes |
+|------|-------|
+| Emoji panel | picker in the composer (needs a small emoji dataset + popover) |
+| Message edit / delete | edit: own messages, updated_at + "edited" marker; delete-for-me / delete-for-everyone |
+| Leave / delete group | leave = remove self + eviction events; delete = admin destroys chat |
+| User settings | display name, password change, maybe avatar later |
+
+Concerns (deferred, noted):
+- Registration is unguarded (anyone can sign up) — fine for now; later: invite
+  token or email verification.
+- User search lists all matching users on a letter — acceptable for a private
+  app; later: hide-by-default / friends-only search.
 
 ## Fix round 1 — 2026-08-02 (all 9 closed)
 
