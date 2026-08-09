@@ -289,13 +289,31 @@ Tests updated to the hard-delete semantics (55/55 green).
 | Item | Notes |
 |------|-------|
 | ~~Message edit / delete~~ | ✅ DONE Aug 7 + UX round Aug 9 |
+| ~~User settings~~ | ✅ DONE Aug 9 — see "Feature round 2" below |
 | Emoji panel | picker in the composer (needs a small emoji dataset + popover) |
 | Leave / delete group | leave = remove self + eviction events; delete = admin destroys chat |
-| User settings | display name, password change, maybe avatar later |
 | **Admin panel** 🆕 | hidden from normal users (separate subdomain or admin flag):
   **monitor** — traffic, DB size, message/user/chat stats; **manage** — e.g. a
   kill-switch to pause new registrations. Two parts: monitor + manage. Not
   urgent; keep as backlog. |
+
+### Feature round 2 — Aug 9: user settings ✅
+
+Implemented end to end (commit `f0b37d7`), 58/58 tests, verified live in a
+browser with a second WS client (9/9 checks):
+
+- **Entry point:** click your profile chip (bottom of the sidebar) → Settings
+  modal (display name · password · log out).
+- **Display name:** `PATCH /api/me {displayName}` (validated: non-empty,
+  ≤ 32 chars) → `user.updated` WS event fanned out to everyone who shares a
+  chat with you — the name updates live in their member lists/headers, and in
+  your own me-chip + session.
+- **Password change:** `PATCH /api/me {currentPassword, newPassword}` — verifies
+  the current password, enforces min 8 chars, rehashes with bcrypt. Verified
+  end-to-end: change → old password rejected, new password logs in.
+- **Log out:** clears the stored token and returns to the login screen.
+- Tests: name update + broadcast to chat partner, empty/too-long rejection,
+  wrong-current rejection, old-password-fails/new-password-works.
 
 Concerns (deferred, noted):
 - Registration is unguarded (anyone can sign up) — fine for now; later: invite
