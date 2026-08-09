@@ -79,6 +79,27 @@ export function getUserById(db: Db, id: number): UserDTO | null {
   return row ? toDTO(row) : null;
 }
 
+// ── Profile updates ────────────────────────────────────────────────────
+export function updateDisplayName(db: Db, userId: number, displayName: string): UserDTO {
+  const name = displayName.trim();
+  if (!name) throw new BadRequest('Display name cannot be empty');
+  if (name.length > 32) throw new BadRequest('Display name must be at most 32 characters');
+  db.prepare('UPDATE users SET display_name = ? WHERE id = ?').run(name, userId);
+  const user = getUserById(db, userId);
+  if (!user) throw new Unauthorized('User not found');
+  return user;
+}
+
+export function changePassword(db: Db, userId: number, current: string, next: string): void {
+  const row = db.prepare('SELECT password_hash FROM users WHERE id = ?').get(userId) as
+    | { password_hash: string }
+    | undefined;
+  if (!row) throw new Unauthorized('User not found');
+  if (!bcrypt.compareSync(current, row.password_hash)) throw new BadRequest('Current password is incorrect');
+  if (next.length < 8) throw new BadRequest('New password must be at least 8 characters');
+  db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(bcrypt.hashSync(next, SALT_ROUNDS), userId);
+}
+
 export function searchUsers(db: Db, query: string): UserDTO[] {
   const rows = db
     .prepare('SELECT id, username, display_name, created_at FROM users WHERE username LIKE ? ORDER BY username LIMIT 20')

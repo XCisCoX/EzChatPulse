@@ -209,3 +209,86 @@ test('unknown ws message type returns UNKNOWN_TYPE error', async () => {
   assert.equal(msg.code, 'UNKNOWN_TYPE');
   ws.close();
 });
+
+// ── Profile updates (PATCH /api/me) ────────────────────────────────────
+
+test('display name update persists and is broadcast to chat partners', async () => {
+  const alice = await registerUser(ctx, 'alice', 'Alice', 'password123');
+  const bob = await registerUser(ctx, 'bob', 'Bob', 'password123');
+
+  // they share a chat so Bob's socket should receive the broadcast
+  const chatRes = await authed('/api/chats', alice.token, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ type: 'private', userId: bob.user.id }),
+  });
+  assert.equal(chatRes.status, 201);
+  const wsB = await wsConnectAuthed(ctx.port, bob.token);
+
+  const res = await authed('/api/me', alice.token, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ displayName: 'Alice Prime' }),
+  });
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as any;
+  assert.equal(body.user.displayName, 'Alice Prime');
+
+  // persisted: /api/me reflects it
+  const me = (await (await authed('/api/me', alice.token)).json()) as any;
+  assert.equal(me.user.displayName, 'Alice Prime');
+
+  // Bob (chat partner) got the real-time broadcast
+  const evt = await waitForMessage(wsB, (m) => m.t === 'user.updated' && m.user.id === alice.user.id);
+  assert.equal(evt.user.displayName, 'Alice Prime');
+
+  wsB.close();
+});
+
+test('display name rejects empty / too-long values', async () => {
+  const alice = await registerUser(ctx, 'alice', 'Alice', 'password123');
+  const empty = await authed('/api/me', alice.token, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ displayName: '   ' }),
+  });
+  assert.equal(empty.status, 400);
+  const long = await authed('/api/me', alice.token, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ displayName: 'x'.repeat(40) }),
+  });
+  assert.equal(long.status, 400);
+});
+
+test('password change: wrong current rejected, new password works for login', async () => {
+  const alice = await registerUser(ctx, 'alice', 'Alice', 'password123');
+
+  const wrong = await authed('/api/me', alice.token, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ currentPassword: 'not-the-password', newPassword: 'brandnewpass1' }),
+  });
+  assert.equal(wrong.status, 400);
+
+  const ok = await authed('/api/me', alice.token, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ currentPassword: 'password123', newPassword: 'brandnewpass1' }),
+  });
+  assert.equal(ok.status, 200);
+
+  // old password no longer works, new one does
+  const oldLogin = await api('/api/login', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ username: 'alice', password: 'password123' }),
+  });
+  assert.equal(oldLogin.status, 401);
+  const newLogin = await api('/api/login', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ username: 'alice', password: 'brandnewpass1' }),
+  });
+  assert.equal(newLogin.status, 200);
+});

@@ -1012,6 +1012,96 @@ textarea::placeholder {
   transform: none;
 }
 
+/* ── Settings modal ──────────────────────────────────────────────────── */
+
+.settings-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.settings-modal h2 {
+  font-size: 19px;
+}
+
+.set-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.set-hint {
+  font-size: 12.5px;
+  color: var(--text-2);
+  margin: 0;
+}
+
+.set-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.set-field label {
+  font-size: 12.5px;
+  color: var(--text-1);
+  font-weight: 600;
+}
+
+.set-field input {
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--glass);
+  color: var(--text-0);
+  font: inherit;
+  font-size: 14px;
+  outline: none;
+}
+
+.set-field input:focus {
+  border-color: rgba(168, 85, 247, 0.55);
+}
+
+.set-save {
+  align-self: flex-start;
+  border: none;
+  border-radius: 10px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+  background: var(--grad);
+  cursor: pointer;
+}
+
+.set-save:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.set-logout {
+  align-self: flex-start;
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  background: none;
+  color: var(--red);
+  border-radius: 10px;
+  padding: 8px 18px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.set-logout:hover {
+  background: rgba(239, 68, 68, 0.12);
+}
+
+#me-chip {
+  cursor: pointer;
+}
+
 .group-modal,
 .members-modal {
   display: flex;

@@ -60,6 +60,12 @@ export const api = {
       body: JSON.stringify({ username, password }),
     }),
   me: () => request<{ user: UserDTO }>('/api/me'),
+  updateMe: (body: { displayName?: string; currentPassword?: string; newPassword?: string }) =>
+    request<{ user: UserDTO }>('/api/me', {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
   users: (q: string) => request<{ users: UserDTO[] }>(`/api/users?q=${encodeURIComponent(q)}`),
   chats: () => request<{ chats: ChatDTO[] }>('/api/chats'),
   createPrivate: (userId: number) =>

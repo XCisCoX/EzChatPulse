@@ -50,6 +50,10 @@ class ChatSocket {
         break;
       }
 
+      case 'user.updated':
+        store.setUser(msg.user);
+        break;
+
       case 'msg.edited':
         store.updateMessage(msg.msg.chatId, msg.msg);
         break;

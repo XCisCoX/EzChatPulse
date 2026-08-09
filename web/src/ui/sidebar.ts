@@ -1,6 +1,7 @@
 import { store } from '../store';
 import { avatarEl, formatTime } from './format';
 import { openCreateGroupModal, openNewChatModal } from './group';
+import { openSettingsModal } from './settings';
 import { api } from '../api';
 import { toast } from './toast';
 import type { UIChat, UIMessage, UserDTO } from '../types';
@@ -15,6 +16,8 @@ function previewText(m: UIMessage | null): string {
 export function mountSidebar(onSelect: (chatId: number) => void): void {
   const list = document.querySelector('#chat-list')!;
   const meChip = document.querySelector('#me-chip')!;
+  meChip.addEventListener('click', () => openSettingsModal());
+  (meChip as HTMLElement).title = 'Settings';
   const search = document.querySelector<HTMLInputElement>('#sidebar-search')!;
   const newBtn = document.querySelector<HTMLButtonElement>('#btn-new')!;
   const newMenu = document.querySelector<HTMLDivElement>('#new-menu')!;

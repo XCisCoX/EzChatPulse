@@ -71,3 +71,14 @@ export function broadcastPayloadToChat(chatId: number, payload: string, exceptUs
   }
   return sent;
 }
+
+/** Fan out an event to everyone who shares a chat with `userId` (e.g. profile updates). */
+export function broadcastUserUpdate(userId: number, event: object): number {
+  const payload = JSON.stringify(event);
+  const chatIds = getDb().prepare('SELECT chat_id FROM chat_members WHERE user_id = ?').all(userId) as Array<{
+    chat_id: number;
+  }>;
+  let sent = 0;
+  for (const { chat_id } of chatIds) sent += broadcastPayloadToChat(chat_id, payload, userId);
+  return sent;
+}

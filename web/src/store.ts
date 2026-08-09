@@ -128,6 +128,18 @@ class Store {
     this.notify();
   }
 
+  /** Apply a user-profile update (own session + member lists everywhere). */
+  setUser(user: UserDTO): void {
+    if (this.state.session && this.state.session.user.id === user.id) {
+      this.state.session.user = user;
+    }
+    for (const chat of this.state.chats.values()) {
+      const m = chat.members.find((x) => x.userId === user.id);
+      if (m) m.displayName = user.displayName;
+    }
+    this.notify();
+  }
+
   /** Remove a message entirely (delete-for-me / delete-for-everyone). */
   removeMessage(chatId: number, msgId: number): void {
     const chat = this.state.chats.get(chatId);

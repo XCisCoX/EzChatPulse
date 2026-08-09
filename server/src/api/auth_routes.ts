@@ -1,10 +1,11 @@
 import { Router } from 'express';
 import type { Request, Response, NextFunction } from 'express';
 import { getDb } from '../db.js';
-import { register, login, requireAuth, getUserById } from '../auth.js';
-import { isOnline } from '../ws/hub.js';
+import { register, login, requireAuth, getUserById, updateDisplayName, changePassword } from '../auth.js';
+import { isOnline, broadcastUserUpdate } from '../ws/hub.js';
 import { rateLimit } from '../rate-limit.js';
 import { config } from '../config.js';
+import { BadRequest } from '../errors.js';
 
 const router = Router();
 
@@ -49,6 +50,36 @@ router.get('/me', requireAuth, wrap(async (req, res) => {
   if (!user) {
     res.status(404).json({ error: 'User not found' });
     return;
+  }
+  res.json({ user: { ...user, online: isOnline(user.id) } });
+}));
+
+/**
+ * PATCH /api/me — update profile fields.
+ * Body: { displayName?: string } and/or { currentPassword: string, newPassword: string }.
+ * A display-name change is fanned out in real time to everyone who shares a chat.
+ */
+router.patch('/me', requireAuth, wrap(async (req, res) => {
+  const { displayName, currentPassword, newPassword } = req.body ?? {};
+  const userId = req.userId;
+  let user = getUserById(getDb(), userId);
+  if (!user) {
+    res.status(404).json({ error: 'User not found' });
+    return;
+  }
+  let changed = false;
+  if (displayName !== undefined) {
+    user = updateDisplayName(getDb(), userId, displayName);
+    changed = true;
+  }
+  if (newPassword !== undefined) {
+    if (typeof currentPassword !== 'string') throw new BadRequest('currentPassword is required to change the password');
+    changePassword(getDb(), userId, currentPassword, newPassword);
+    changed = true;
+  }
+  if (!changed) throw new BadRequest('Nothing to update');
+  if (displayName !== undefined) {
+    broadcastUserUpdate(userId, { t: 'user.updated', user });
   }
   res.json({ user: { ...user, online: isOnline(user.id) } });
 }));
