@@ -23,6 +23,10 @@
 | CP-13 | On phone, profile + button slip under Firefox's bottom search bar | 🔸 minor | bug | 🟢 fixed | layout / mobile |
 | CP-14 | Clearing the sidebar search does nothing (results stay stuck) | 🔸 minor | bug | ✅ verified | sidebar search |
 | CP-15 | False unread: your own message shows as '1' after refresh | 🔸 minor | bug | ✅ verified | unread counts |
+| CP-16 | Edit/delete buttons misplaced (off-screen on phone, horizontal scrollbar on desktop hover) | 🔸 minor | bug | ✅ verified | message actions |
+| CP-17 | Delete-for-everyone leaves a WhatsApp-style tombstone — should vanish | 🔸 minor | bug | ✅ verified | message delete |
+| CP-18 | Deleted message still shows its content in the chat-list preview | 🔸 minor | bug | ✅ verified | sidebar preview |
+| CP-19 | 'edited' label unreadable on colorful bubbles (too dark) | 🔹 cosmetic | bug | ✅ verified | message meta |
 
 ---
 
@@ -251,6 +255,47 @@ real browser with a second WS client:
   delete-everyone + non-sender forbidden, group-admin delete, delete-for-me
   isolation. Also hardened the test helper: contexts now force-close client
   sockets, so a failing test can never hang the suite again.
+
+## CP-16..CP-19 — edit/delete UX round (Aug 9) ✅
+
+Follow-up feedback on the Aug 7 feature, all verified live in a real browser
+(desktop mouse + CDP real touch events) at commit `08a1f1e`:
+
+- **CP-16 — menu placement:** the hover/tap ✎🗑 buttons are gone. The message
+  menu (✎ Edit · 🗑 Delete for me · 🗑 Delete for everyone) now opens on
+  **right-click** (desktop, at the cursor) or **single tap** (mobile, above the
+  message — Telegram style). Tap detection is drag-safe: a touch that moves
+  more than 10 px or lasts over 400 ms is treated as scroll/drag and never
+  opens the menu (verified with real CDP touch events incl. a 300 px drag).
+  Menu closes on outside tap/click, Esc, or scroll; items are clamped to the
+  viewport. Group admins additionally get "Delete for everyone" on any message.
+- **CP-17 — no more tombstone:** delete-for-everyone now **hard-deletes** the
+  row server-side (`DELETE FROM messages`), so nothing is left behind for
+  anyone. Idempotent (deleting twice is a no-op); editing a deleted message
+  returns NOT_FOUND. Legacy tombstone rows (from the previous build) still
+  render for compatibility but no new ones are created.
+- **CP-18 — sidebar preview:** `removeMessage` now rolls the chat-list preview
+  back to the previous message when the last one is deleted (live, no reload);
+  server-side the last-message query naturally falls back after a hard delete.
+- **CP-19 — 'edited' label:** now light (white 82% + subtle shadow) instead of
+  the dark muted tone, readable on any bubble color.
+
+Tests updated to the hard-delete semantics (55/55 green).
+
+---
+
+## Feature backlog (Aug 9)
+
+| Item | Notes |
+|------|-------|
+| ~~Message edit / delete~~ | ✅ DONE Aug 7 + UX round Aug 9 |
+| Emoji panel | picker in the composer (needs a small emoji dataset + popover) |
+| Leave / delete group | leave = remove self + eviction events; delete = admin destroys chat |
+| User settings | display name, password change, maybe avatar later |
+| **Admin panel** 🆕 | hidden from normal users (separate subdomain or admin flag):
+  **monitor** — traffic, DB size, message/user/chat stats; **manage** — e.g. a
+  kill-switch to pause new registrations. Two parts: monitor + manage. Not
+  urgent; keep as backlog. |
 
 Concerns (deferred, noted):
 - Registration is unguarded (anyone can sign up) — fine for now; later: invite
