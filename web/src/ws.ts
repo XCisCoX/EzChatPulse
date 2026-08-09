@@ -55,12 +55,10 @@ class ChatSocket {
         break;
 
       case 'msg.deleted':
-        if (msg.mode === 'me') {
-          store.removeMessage(msg.cid, msg.msgId);
-        } else {
-          // everyone: mark as deleted → the pane renders the tombstone
-          store.updateMessage(msg.cid, { id: msg.msgId, deletedAt: Date.now() });
-        }
+        // both modes remove the message from the viewer's list:
+        //  - 'me': hidden only for this user
+        //  - 'everyone': hard-deleted server-side, gone for everyone
+        store.removeMessage(msg.cid, msg.msgId);
         break;
 
       case 'msg.new': {

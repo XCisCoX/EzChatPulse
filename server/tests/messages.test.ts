@@ -302,7 +302,7 @@ test('edit: sender updates text, both sides get msg.edited with editedAt', async
   wsB.close();
 });
 
-test('edit: cannot edit a deleted message or a media message', async () => {
+test('edit: cannot edit a deleted message', async () => {
   const alice = await registerUser(ctx, 'alice', 'Alice', 'password123');
   const bob = await registerUser(ctx, 'bob', 'Bob', 'password123');
   const chatId = await createPrivateChat(alice.token, bob.user.id);
@@ -313,12 +313,12 @@ test('edit: cannot edit a deleted message or a media message', async () => {
   const msgId = (await waitForMessage(wsA, (m) => m.t === 'msg.ack')).msg.id;
   await waitForMessage(wsB, (m) => m.t === 'msg.new' && m.msg.id === msgId);
 
-  // delete for everyone, then try to edit
+  // delete for everyone, then try to edit → the row is gone (NOT_FOUND)
   wsA.send(JSON.stringify({ t: 'msg.delete', cid: chatId, msgId, mode: 'everyone' }));
   await waitForMessage(wsB, (m) => m.t === 'msg.deleted' && m.msgId === msgId);
   wsA.send(JSON.stringify({ t: 'msg.edit', cid: chatId, msgId, text: 'zombie' }));
   const err = await waitForMessage(wsA, (m) => m.t === 'error');
-  assert.equal(err.code, 'BAD_REQUEST');
+  assert.equal(err.code, 'NOT_FOUND');
 
   wsA.close();
   wsB.close();
@@ -341,7 +341,7 @@ test('delete for everyone: tombstone broadcast; non-sender forbidden', async () 
   const errB = await waitForMessage(wsB, (m) => m.t === 'error');
   assert.equal(errB.code, 'FORBIDDEN');
 
-  // Alice deletes → both sides get msg.deleted; history shows the tombstone
+  // Alice deletes → both sides get msg.deleted; history no longer contains it
   wsA.send(JSON.stringify({ t: 'msg.delete', cid: chatId, msgId, mode: 'everyone' }));
   const delA = await waitForMessage(wsA, (m) => m.t === 'msg.deleted' && m.msgId === msgId);
   const delB = await waitForMessage(wsB, (m) => m.t === 'msg.deleted' && m.msgId === msgId);
@@ -349,7 +349,7 @@ test('delete for everyone: tombstone broadcast; non-sender forbidden', async () 
   assert.equal(delB.mode, 'everyone');
 
   const hist = await (await authed(`/api/chats/${chatId}/messages`, alice.token)).json();
-  assert.ok(hist.messages[0].deletedAt > 0, 'deleted_at must be set');
+  assert.ok(!hist.messages.some((m: any) => m.id === msgId), 'message is hard-deleted (no tombstone)');
 
   wsA.close();
   wsB.close();

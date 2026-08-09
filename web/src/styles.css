@@ -533,100 +533,66 @@ textarea::placeholder {
   color: rgba(255, 255, 255, 0.85);
 }
 
-/* ── edit & delete UI ─────────────────────────────────────────────────── */
+/* ── message context menu ─────────────────────────────────────────────── */
 
-.msg-row {
-  position: relative;
-}
-
-.msg-actions {
-  position: absolute;
-  top: 4px;
-  right: calc(100% + 6px);
-  display: none;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.msg-row.mine .msg-actions {
-  right: auto;
-  left: calc(100% + 6px);
-}
-
-.msg-row:hover .msg-actions,
-.msg-row.show-actions .msg-actions {
+.ctx-menu {
+  position: fixed;
+  z-index: 60;
+  min-width: 190px;
   display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+  background: rgba(18, 23, 44, 0.96);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 14px 44px rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(14px);
+  white-space: nowrap;
 }
 
-.msg-action-btn {
-  width: 30px;
-  height: 30px;
-  border: 1px solid var(--border);
-  border-radius: 50%;
-  background: rgba(18, 23, 44, 0.92);
+.ctx-item {
+  border: none;
+  background: none;
   color: var(--text-1);
-  font-size: 13px;
+  font-size: 13.5px;
+  text-align: left;
+  padding: 9px 12px;
+  border-radius: 9px;
   cursor: pointer;
   display: flex;
   align-items: center;
-  justify-content: center;
-  backdrop-filter: blur(10px);
-  transition: background 0.12s, color 0.12s, transform 0.1s;
+  gap: 8px;
+  transition: background 0.1s;
 }
 
-.msg-action-btn:hover {
+.ctx-item:hover {
   background: var(--glass-hover);
   color: var(--text-0);
-  transform: scale(1.08);
+}
+
+.ctx-item.danger {
+  color: var(--red);
+}
+
+.ctx-item.danger:hover {
+  background: rgba(239, 68, 68, 0.14);
+  color: #ff8f8f;
 }
 
 .msg-edited {
   font-size: 11px;
-  color: var(--text-2);
+  color: rgba(255, 255, 255, 0.82);
   margin-left: 4px;
   font-style: italic;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
 }
 
+/* legacy rows only — new deletes remove the row entirely */
 .msg-deleted {
   font-style: italic;
   color: var(--text-2);
   user-select: none;
-}
-
-.delete-menu {
-  position: absolute;
-  bottom: calc(100% + 6px);
-  left: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 5px;
-  background: rgba(18, 23, 44, 0.95);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.5);
-  z-index: 4;
-  white-space: nowrap;
-}
-
-.delete-menu button {
-  border: none;
-  background: none;
-  color: var(--text-1);
-  font-size: 13px;
-  text-align: left;
-  padding: 7px 12px;
-  border-radius: 8px;
-  cursor: pointer;
-}
-
-.delete-menu button:hover {
-  background: var(--glass-hover);
-  color: var(--text-0);
-}
-
-.delete-menu button:last-child {
-  color: var(--red);
 }
 
 .edit-input {

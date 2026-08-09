@@ -128,12 +128,17 @@ class Store {
     this.notify();
   }
 
-  /** Remove a message entirely (delete-for-me). */
+  /** Remove a message entirely (delete-for-me / delete-for-everyone). */
   removeMessage(chatId: number, msgId: number): void {
     const chat = this.state.chats.get(chatId);
     if (!chat) return;
     const idx = chat.messages.findIndex((m) => m.id === msgId);
     if (idx >= 0) chat.messages.splice(idx, 1);
+    // keep the sidebar preview honest: if the removed message was the last
+    // one we knew about, fall back to the previous message (or nothing)
+    if (chat.lastMessage?.id === msgId) {
+      chat.lastMessage = chat.messages[chat.messages.length - 1] ?? null;
+    }
     this.notify();
   }
 

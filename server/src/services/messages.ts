@@ -171,18 +171,21 @@ export function editMessage(db: Db, actorId: number, chatId: number, msgId: numb
 }
 
 /**
- * Delete for everyone (soft delete → tombstone). Allowed for the sender, or a
- * group admin deleting any message in their group.
+ * Delete for everyone — the message row is removed entirely (no tombstone).
+ * Allowed for the sender, or a group admin deleting any message in their group.
+ * Idempotent: deleting an already-deleted message is a no-op.
  */
 export function deleteMessageForEveryone(db: Db, actorId: number, chatId: number, msgId: number): void {
   assertMember(db, chatId, actorId);
-  const row = getChatMessage(db, chatId, msgId);
-  if (row.deleted_at) return; // already deleted — idempotent
+  const row = db.prepare('SELECT id, sender_id, chat_id FROM messages WHERE id = ? AND chat_id = ?').get(msgId, chatId) as
+    | { id: number; sender_id: number; chat_id: number }
+    | undefined;
+  if (!row) return; // already gone — idempotent
   const chat = db.prepare('SELECT type FROM chats WHERE id = ?').get(chatId) as { type: string } | undefined;
   const isSender = row.sender_id === actorId;
   const isGroupAdmin = chat?.type === 'group' && isAdmin(db, chatId, actorId);
   if (!isSender && !isGroupAdmin) throw new Forbidden('Only the sender or a group admin can delete for everyone');
-  db.prepare('UPDATE messages SET deleted_at = ? WHERE id = ?').run(Date.now(), msgId);
+  db.prepare('DELETE FROM messages WHERE id = ?').run(msgId);
 }
 
 /** Delete for me: the message stays for everyone else, hidden only for the actor. */

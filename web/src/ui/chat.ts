@@ -213,34 +213,39 @@ export function mountChatPane(): void {
     bubble.appendChild(meta);
     row.appendChild(bubble);
 
-    // edit/delete actions for own, delivered, non-deleted messages
-    if (mine && !msg.deletedAt && !msg.pending) {
-      const actions = document.createElement('div');
-      actions.className = 'msg-actions';
-      const editBtn = document.createElement('button');
-      editBtn.className = 'msg-action-btn';
-      editBtn.textContent = '✎';
-      editBtn.title = 'Edit';
-      editBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        beginEdit(chat, msg, row);
-      });
-      const delBtn = document.createElement('button');
-      delBtn.className = 'msg-action-btn';
-      delBtn.textContent = '🗑';
-      delBtn.title = 'Delete';
-      delBtn.addEventListener('click', (e) => showDeleteMenu(chat, msg, row, e));
-      actions.append(editBtn, delBtn);
-      row.appendChild(actions);
+    // right-click (desktop) opens the message menu at the cursor
+    row.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      openMessageMenu(chat, msg, row, e.clientX, e.clientY);
+    });
 
-      // tap (mobile) / click toggles the actions; only one open at a time
-      row.addEventListener('click', () => {
-        if (msg.failed || editingKey) return;
-        const wasOpen = row.classList.contains('show-actions');
-        messagesEl.querySelectorAll<HTMLElement>('.msg-row.show-actions').forEach((r) => r.classList.remove('show-actions'));
-        if (!wasOpen) row.classList.add('show-actions');
-      });
-    }
+    // single tap (mobile) opens the menu too — but only for a real tap:
+    // short duration + negligible movement, so scrolling/dragging never triggers it
+    let tStartX = 0;
+    let tStartY = 0;
+    let tStartT = 0;
+    row.addEventListener(
+      'touchstart',
+      (e) => {
+        const t = e.touches[0]!;
+        tStartX = t.clientX;
+        tStartY = t.clientY;
+        tStartT = Date.now();
+      },
+      { passive: true },
+    );
+    row.addEventListener('touchend', (e) => {
+      const t = e.changedTouches[0]!;
+      const dt = Date.now() - tStartT;
+      if (msg.failed) return; // tap on a failed message = retry
+      if (dt > 400 || Math.hypot(t.clientX - tStartX, t.clientY - tStartY) > 10) return;
+      const target = e.target as HTMLElement;
+      // don't hijack taps on images (lightbox) or download links
+      if (target.closest('.msg-content img, .file-dl, a, .edit-input, .ctx-menu')) return;
+      e.preventDefault();
+      const rect = row.getBoundingClientRect();
+      openMessageMenu(chat, msg, row, rect.left + rect.width / 2, rect.top);
+    });
 
     row.dataset.rev = String(msg.rev ?? 0);
 
@@ -338,32 +343,90 @@ export function mountChatPane(): void {
     });
   }
 
-  function showDeleteMenu(chat: UIChat, msg: UIMessage, row: HTMLElement, e: Event): void {
-    e.stopPropagation();
-    messagesEl.querySelector('.delete-menu')?.remove();
+  // ── message context menu ──────────────────────────────────────────────
+  let menuOpenCleanup: (() => void) | null = null;
+
+  function closeMessageMenu(): void {
+    menuOpenCleanup?.();
+    menuOpenCleanup = null;
+  }
+
+  function menuItem(label: string, danger: boolean, onPick: () => void): HTMLButtonElement {
+    const b = document.createElement('button');
+    b.className = danger ? 'ctx-item danger' : 'ctx-item';
+    b.textContent = label;
+    b.addEventListener('click', (e) => {
+      e.stopPropagation();
+      onPick();
+    });
+    return b;
+  }
+
+  /** Open the per-message menu (Edit / Delete for me / Delete for everyone). */
+  function openMessageMenu(chat: UIChat, msg: UIMessage, row: HTMLElement, x: number, y: number): void {
+    closeMessageMenu();
+    const mine = isMine(msg);
+    const me = store.state.session?.user.id;
+    const myRole = chat.members.find((m) => m.userId === me)?.role;
+    const isAdmin = chat.type === 'group' && myRole === 'admin';
+    const canEdit = mine && msg.kind === 'text' && !msg.deletedAt && !msg.pending;
+
     const menu = document.createElement('div');
-    menu.className = 'delete-menu';
-    const meBtn = document.createElement('button');
-    meBtn.textContent = 'Delete for me';
-    const allBtn = document.createElement('button');
-    allBtn.textContent = 'Delete for everyone';
-    const close = (): void => menu.remove();
-    meBtn.addEventListener('click', (ev) => {
-      ev.stopPropagation();
-      close();
-      socket.send({ t: 'msg.delete', cid: chat.id, msgId: msg.id, mode: 'me' });
-    });
-    allBtn.addEventListener('click', (ev) => {
-      ev.stopPropagation();
-      close();
-      socket.send({ t: 'msg.delete', cid: chat.id, msgId: msg.id, mode: 'everyone' });
-    });
-    menu.append(meBtn, allBtn);
-    row.appendChild(menu);
+    menu.className = 'ctx-menu';
+    if (canEdit) {
+      menu.appendChild(
+        menuItem('✎ Edit', false, () => {
+          closeMessageMenu();
+          beginEdit(chat, msg, row);
+        }),
+      );
+    }
+    menu.appendChild(
+      menuItem('🗑 Delete for me', false, () => {
+        closeMessageMenu();
+        socket.send({ t: 'msg.delete', cid: chat.id, msgId: msg.id, mode: 'me' });
+      }),
+    );
+    if (mine || isAdmin) {
+      menu.appendChild(
+        menuItem('🗑 Delete for everyone', true, () => {
+          closeMessageMenu();
+          socket.send({ t: 'msg.delete', cid: chat.id, msgId: msg.id, mode: 'everyone' });
+        }),
+      );
+    }
+    document.body.appendChild(menu);
+
+    // position at the cursor (desktop) or the tapped row (mobile), clamped to the viewport
+    const mw = menu.offsetWidth;
+    const mh = menu.offsetHeight;
+    menu.style.left = `${Math.min(Math.max(8, x), window.innerWidth - mw - 8)}px`;
+    menu.style.top = `${Math.min(Math.max(8, y), window.innerHeight - mh - 8)}px`;
+
+    const onDocDown = (e: PointerEvent): void => {
+      if (!menu.contains(e.target as Node)) closeMessageMenu();
+    };
+    const onEsc = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') closeMessageMenu();
+    };
+    const onScroll = (): void => closeMessageMenu();
+    menuOpenCleanup = () => {
+      document.removeEventListener('pointerdown', onDocDown);
+      document.removeEventListener('keydown', onEsc);
+      window.removeEventListener('scroll', onScroll, true);
+      menu.remove();
+    };
+    // defer the outside-click listener so the opening interaction isn't swallowed
+    setTimeout(() => {
+      document.addEventListener('pointerdown', onDocDown);
+      document.addEventListener('keydown', onEsc);
+      window.addEventListener('scroll', onScroll, true);
+    }, 0);
   }
 
   // ── rendering ─────────────────────────────────────────────────────────
   function renderChat(chat: UIChat): void {
+    closeMessageMenu();
     currentChatId = chat.id;
     chatPane.classList.remove('hidden');
     emptyState.classList.add('hidden');
