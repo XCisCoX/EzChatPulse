@@ -290,12 +290,28 @@ Tests updated to the hard-delete semantics (55/55 green).
 |------|-------|
 | ~~Message edit / delete~~ | ✅ DONE Aug 7 + UX round Aug 9 |
 | ~~User settings~~ | ✅ DONE Aug 9 — see "Feature round 2" below |
+| ~~Admin panel~~ | ✅ DONE Aug 9 — see "Feature round 3" below (monitor + manage) |
 | Emoji panel | picker in the composer (needs a small emoji dataset + popover) |
 | Leave / delete group | leave = remove self + eviction events; delete = admin destroys chat |
-| **Admin panel** 🆕 | hidden from normal users (separate subdomain or admin flag):
-  **monitor** — traffic, DB size, message/user/chat stats; **manage** — e.g. a
-  kill-switch to pause new registrations. Two parts: monitor + manage. Not
-  urgent; keep as backlog. |
+
+### Feature round 3 — Aug 9: admin panel ✅
+
+Motivated by: friends forgetting passwords with no reset path (email reset
+needs SMTP + user emails that don't exist yet — admin reset solves it today).
+Commit `f2ff715`, 63/63 tests, all live checks passed (incl. real 28-user DB).
+
+- **Gate:** `ADMIN_USERNAMES` env (comma-separated) — checked lazily per
+  request; everyone else gets 403 on all admin endpoints.
+- **Console:** `/admin` — self-contained page (server/admin-page.html), its own
+  login, hidden from normal users (no link anywhere in the app).
+- **Monitor:** live stats — users / chats / messages / files, DB size, uptime,
+  live WS connections, registration state; user table with online/last-seen.
+- **Manage:**
+  - reset any user's password (the original ask — no email needed)
+  - registration kill-switch (persists in `app_settings`, survives restarts;
+    env default via `REGISTRATION_OPEN`); register route returns 403 when closed.
+- Migration v3 (`app_settings` key/value). The test harness mounts admin routes
+  too, so integration tests cover the real wiring.
 
 ### Feature round 2 — Aug 9: user settings ✅
 
