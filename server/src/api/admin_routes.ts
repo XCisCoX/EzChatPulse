@@ -35,6 +35,9 @@ router.get(
     const db = getDb();
     const count = (table: string): number =>
       (db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get() as { n: number }).n;
+    const deletedMessages = (db
+      .prepare('SELECT COUNT(*) AS n FROM messages WHERE deleted_at IS NOT NULL')
+      .get() as { n: number }).n;
     let dbSizeBytes = 0;
     if (config.dbPath !== ':memory:') {
       try {
@@ -48,11 +51,31 @@ router.get(
       chats: count('chats'),
       messages: count('messages'),
       files: count('files'),
+      deletedMessages,
       dbSizeBytes,
       uptimeSec: Math.round(process.uptime()),
       connections: totalConnections(),
       registrationOpen: getSetting(db, 'registration_open', process.env.REGISTRATION_OPEN ?? 'true') === 'true',
     });
+  }),
+);
+
+/**
+ * Permanently delete soft-deleted (flagged) messages older than N days.
+ * Body: { days: number }. Returns how many rows were purged.
+ */
+router.post(
+  '/cleanup-deleted',
+  wrap(async (req, res) => {
+    const days = Number((req.body ?? {}).days);
+    if (!Number.isFinite(days) || days < 0 || days > 3650) {
+      throw new BadRequest('days must be a number between 0 and 3650');
+    }
+    const cutoff = Date.now() - days * 86_400_000;
+    const info = getDb()
+      .prepare('DELETE FROM messages WHERE deleted_at IS NOT NULL AND deleted_at < ?')
+      .run(cutoff);
+    res.json({ deleted: info.changes });
   }),
 );
 

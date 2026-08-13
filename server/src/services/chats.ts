@@ -170,10 +170,10 @@ export function getChat(db: Db, chatId: number, viewerId: number): ChatDTO | nul
   const row = db
     .prepare(
       `SELECT c.id, c.type, c.name, c.created_at,
-              (SELECT MAX(m.id) FROM messages m WHERE m.chat_id = c.id) AS last_msg_id,
+              (SELECT MAX(m.id) FROM messages m WHERE m.chat_id = c.id AND m.deleted_at IS NULL) AS last_msg_id,
               (SELECT COUNT(*) FROM messages m
                WHERE m.chat_id = c.id AND m.id > COALESCE(rs.last_read_message_id, 0)
-                 AND m.sender_id != ?) AS unread
+                 AND m.sender_id != ? AND m.deleted_at IS NULL) AS unread
        FROM chats c
        LEFT JOIN read_state rs ON rs.chat_id = c.id AND rs.user_id = ?
        WHERE c.id = ?`,
@@ -224,11 +224,11 @@ export function listChats(db: Db, userId: number): ChatDTO[] {
   const rows = db
     .prepare(
       `SELECT c.id, c.type, c.name, c.created_at,
-              (SELECT MAX(m.id) FROM messages m WHERE m.chat_id = c.id) AS last_msg_id,
+              (SELECT MAX(m.id) FROM messages m WHERE m.chat_id = c.id AND m.deleted_at IS NULL) AS last_msg_id,
               (SELECT COUNT(*) FROM messages m
                WHERE m.chat_id = c.id AND m.id > COALESCE(rs.last_read_message_id, 0)
-                 AND m.sender_id != ?) AS unread,
-              (SELECT MAX(m.created_at) FROM messages m WHERE m.chat_id = c.id) AS last_activity
+                 AND m.sender_id != ? AND m.deleted_at IS NULL) AS unread,
+              (SELECT MAX(m.created_at) FROM messages m WHERE m.chat_id = c.id AND m.deleted_at IS NULL) AS last_activity
        FROM chats c
        JOIN chat_members cm ON cm.chat_id = c.id AND cm.user_id = ?
        LEFT JOIN read_state rs ON rs.chat_id = c.id AND rs.user_id = ?

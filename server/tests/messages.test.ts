@@ -255,6 +255,39 @@ test('findOrCreatePrivate is idempotent', async () => {
   assert.equal(chats.chats.length, 1, 'no duplicate chat rows');
 });
 
+test('reply: replyTo round-trips; foreign-chat reply is rejected', async () => {
+  const alice = await registerUser(ctx, 'alice', 'Alice', 'password123');
+  const bob = await registerUser(ctx, 'bob', 'Bob', 'password123');
+  const chatId = await createPrivateChat(alice.token, bob.user.id);
+
+  const wsA = await wsConnectAuthed(ctx.port, alice.token);
+  const wsB = await wsConnectAuthed(ctx.port, bob.token);
+
+  wsA.send(JSON.stringify({ t: 'msg.send', cid: chatId, tempId: 't0', kind: 'text', text: 'original' }));
+  const original = (await waitForMessage(wsA, (m) => m.t === 'msg.ack')).msg;
+
+  // reply with replyTo
+  wsA.send(JSON.stringify({ t: 'msg.send', cid: chatId, tempId: 't1', kind: 'text', text: 'my reply', replyTo: original.id }));
+  const ack = await waitForMessage(wsA, (m) => m.t === 'msg.ack' && m.tempId === 't1');
+  assert.equal(ack.msg.replyTo, original.id, 'replyTo stored and returned');
+  const fresh = await waitForMessage(wsB, (m) => m.t === 'msg.new' && m.msg.id === ack.msg.id);
+  assert.equal(fresh.msg.replyTo, original.id, 'replyTo delivered to the other side');
+
+  // reply to a message in a DIFFERENT chat → BAD_REQUEST
+  const groupRes = await authed('/api/chats', alice.token, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ type: 'group', name: 'Other', userIds: [bob.user.id] }),
+  });
+  const groupId = ((await groupRes.json()) as any).chatId as number;
+  wsA.send(JSON.stringify({ t: 'msg.send', cid: groupId, tempId: 't2', kind: 'text', text: 'cross', replyTo: original.id }));
+  const err = await waitForMessage(wsA, (m) => m.t === 'error');
+  assert.equal(err.code, 'BAD_REQUEST');
+
+  wsA.close();
+  wsB.close();
+});
+
 // ── Message edit & delete ───────────────────────────────────────────────
 
 async function createGroup(token: string, name: string, userIds: number[]): Promise<number> {
@@ -313,12 +346,12 @@ test('edit: cannot edit a deleted message', async () => {
   const msgId = (await waitForMessage(wsA, (m) => m.t === 'msg.ack')).msg.id;
   await waitForMessage(wsB, (m) => m.t === 'msg.new' && m.msg.id === msgId);
 
-  // delete for everyone, then try to edit → the row is gone (NOT_FOUND)
+  // delete for everyone (soft, hidden), then try to edit → BAD_REQUEST
   wsA.send(JSON.stringify({ t: 'msg.delete', cid: chatId, msgId, mode: 'everyone' }));
   await waitForMessage(wsB, (m) => m.t === 'msg.deleted' && m.msgId === msgId);
   wsA.send(JSON.stringify({ t: 'msg.edit', cid: chatId, msgId, text: 'zombie' }));
   const err = await waitForMessage(wsA, (m) => m.t === 'error');
-  assert.equal(err.code, 'NOT_FOUND');
+  assert.equal(err.code, 'BAD_REQUEST');
 
   wsA.close();
   wsB.close();

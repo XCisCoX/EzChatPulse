@@ -92,6 +92,8 @@
       <button id="btn-reg" class="danger">…</button>
       <span class="muted" style="font-size:12px">registration kill-switch</span>
       <span style="flex:1"></span>
+      <input id="cleanup-days" type="number" min="0" max="3650" value="30" style="width:70px" title="Delete flagged messages older than this many days" />
+      <button id="btn-cleanup" class="danger">Purge deleted &gt; N days</button>
       <button id="btn-refresh" class="ghost">Refresh</button>
       <button id="btn-logout" class="ghost">Log out</button>
     </div>
@@ -164,6 +166,7 @@
       ['Chats', stats.chats],
       ['Messages', stats.messages],
       ['Files', stats.files],
+      ['Deleted (retained)', stats.deletedMessages],
       ['DB size', fmtBytes(stats.dbSizeBytes)],
       ['Uptime', stats.uptimeSec + 's'],
       ['Live conns', stats.connections],
@@ -229,6 +232,18 @@
       toast(e.message, true);
     }
   }
+
+  $('#btn-cleanup').addEventListener('click', async () => {
+    const days = Math.max(0, Math.floor(Number($('#cleanup-days').value) || 0));
+    if (!confirm('Permanently delete flagged messages older than ' + days + ' day(s)? This cannot be undone.')) return;
+    try {
+      const r = await api('/api/admin/cleanup-deleted', { method: 'POST', body: JSON.stringify({ days }) });
+      toast('Purged ' + r.deleted + ' deleted message(s)');
+      await refresh();
+    } catch (e) {
+      toast(e.message, true);
+    }
+  });
 
   $('#a-login').addEventListener('click', async () => {
     try {

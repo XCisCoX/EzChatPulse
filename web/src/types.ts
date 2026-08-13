@@ -5,6 +5,9 @@ export interface UserDTO {
   createdAt: number;
   online: boolean;
   lastSeenAt: number | null;
+  /** private — only present on /api/me responses (never in member/search DTOs) */
+  email?: string | null;
+  emailVerified?: boolean;
 }
 
 export interface MemberInfo {

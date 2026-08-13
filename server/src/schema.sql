@@ -9,7 +9,9 @@ CREATE TABLE IF NOT EXISTS users (
   display_name  TEXT NOT NULL,
   password_hash TEXT NOT NULL,
   created_at    INTEGER NOT NULL,          -- ms epoch
-  last_seen_at  INTEGER                    -- ms epoch; NULL while online
+  last_seen_at  INTEGER,                   -- ms epoch; NULL while online
+  email         TEXT,                      -- optional, set once (for future reset)
+  email_verified INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS chats (

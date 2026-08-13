@@ -34,6 +34,16 @@ const migrations: Array<{ version: number; up: (db: Db) => void }> = [
       )`);
     },
   },
+  {
+    // v4 — email capture: optional user email (set once), verified flag
+    version: 4,
+    up(db) {
+      const cols = db.prepare('PRAGMA table_info(users)').all() as Array<{ name: string }>;
+      const has = (n: string) => cols.some((c) => c.name === n);
+      if (!has('email')) db.exec('ALTER TABLE users ADD COLUMN email TEXT');
+      if (!has('email_verified')) db.exec('ALTER TABLE users ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 0');
+    },
+  },
 ];
 
 function runMigrations(db: Db): void {

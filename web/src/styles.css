@@ -756,11 +756,102 @@ textarea::placeholder {
   padding: 10px 16px 14px;
   position: relative;
   display: flex;
-  align-items: flex-end;
-  gap: 8px;
+  flex-direction: column;
+  gap: 6px;
   background: rgba(12, 15, 30, 0.45);
   border-top: 1px solid var(--border);
   backdrop-filter: blur(14px);
+}
+
+#composer-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+/* reply bar above the input */
+.reply-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: rgba(168, 85, 247, 0.14);
+  border-left: 3px solid #a855f7;
+  border-radius: 10px;
+  font-size: 12.5px;
+  color: var(--text-1);
+}
+
+.reply-bar.hidden {
+  display: none;
+}
+
+.reply-info {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reply-close {
+  border: none;
+  background: none;
+  color: var(--text-2);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 2px 4px;
+  border-radius: 6px;
+}
+
+.reply-close:hover {
+  color: var(--text-0);
+  background: var(--glass-hover);
+}
+
+/* reply quote inside a bubble */
+.msg-quote {
+  background: rgba(255, 255, 255, 0.12);
+  border-left: 3px solid rgba(255, 255, 255, 0.55);
+  border-radius: 6px;
+  padding: 4px 8px;
+  margin-bottom: 6px;
+  cursor: pointer;
+  max-width: 100%;
+}
+
+.msg-quote-sender {
+  font-size: 11.5px;
+  font-weight: 700;
+  opacity: 0.92;
+}
+
+.msg-quote-text {
+  font-size: 12px;
+  opacity: 0.75;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.msg-quote-gone {
+  font-style: italic;
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* highlight when jumping to the replied message */
+@keyframes flash-msg {
+  0% {
+    background: rgba(168, 85, 247, 0.4);
+  }
+  100% {
+    background: transparent;
+  }
+}
+
+.msg-row.flash .msg-bubble {
+  animation: flash-msg 1.6s ease-out;
 }
 
 #msg-input {

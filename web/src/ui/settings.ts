@@ -62,6 +62,52 @@ export function openSettingsModal(): void {
   nameSection.append(nameHint, nameField, nameSave);
   root.appendChild(nameSection);
 
+  // ── email (set once — foundation for password reset later) ──
+  const emailHint = document.createElement('p');
+  emailHint.className = 'set-hint';
+  emailHint.textContent =
+    'Email — set once and it cannot be changed. Needed later for password reset.';
+  const emailField = field('Email', 'email', 'set-email');
+  const emailInput = emailField.querySelector<HTMLInputElement>('#set-email')!;
+  const emailSave = document.createElement('button');
+  emailSave.className = 'set-save';
+  emailSave.textContent = 'Save email';
+  const emailStatus = document.createElement('div');
+  emailStatus.className = 'set-hint';
+  const me = store.state.session?.user;
+  if (me?.email) {
+    emailInput.value = me.email;
+    emailInput.disabled = true;
+    emailSave.style.display = 'none';
+    emailStatus.textContent = me.emailVerified ? '✓ verified' : 'not verified yet';
+  } else {
+    emailStatus.textContent = 'No email on file.';
+  }
+  emailSave.addEventListener('click', async () => {
+    const email = emailInput.value.trim();
+    if (!email) {
+      toast('Enter an email address', 'error');
+      return;
+    }
+    emailSave.disabled = true;
+    try {
+      const { user } = await api.updateMe({ email });
+      store.setUser(user);
+      toast('Email saved', 'info');
+      emailInput.disabled = true;
+      emailSave.style.display = 'none';
+      emailStatus.textContent = 'not verified yet';
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Update failed', 'error');
+    } finally {
+      emailSave.disabled = false;
+    }
+  });
+  const emailSection = document.createElement('section');
+  emailSection.className = 'set-section';
+  emailSection.append(emailHint, emailField, emailSave, emailStatus);
+  root.appendChild(emailSection);
+
   // ── password ──
   const pwHint = document.createElement('p');
   pwHint.className = 'set-hint';

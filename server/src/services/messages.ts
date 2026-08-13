@@ -140,6 +140,7 @@ export function listMessages(db: Db, viewerId: number, chatId: number, before?: 
     .prepare(
       `${MESSAGE_SELECT}
        WHERE m.chat_id = ? AND (? IS NULL OR m.id < ?)
+         AND m.deleted_at IS NULL
          AND NOT EXISTS (SELECT 1 FROM message_hidden h WHERE h.message_id = m.id AND h.user_id = ?)
        ORDER BY m.id DESC LIMIT ?`,
     )
@@ -171,21 +172,24 @@ export function editMessage(db: Db, actorId: number, chatId: number, msgId: numb
 }
 
 /**
- * Delete for everyone — the message row is removed entirely (no tombstone).
+ * Delete for everyone — soft delete: the row is flagged `deleted_at` and
+ * excluded from every normal query (history, previews, unread counts), so it
+ * is invisible to all users but retained for N days until the admin cleanup
+ * runs. Client removes the row on the broadcast — no tombstone shown.
  * Allowed for the sender, or a group admin deleting any message in their group.
  * Idempotent: deleting an already-deleted message is a no-op.
  */
 export function deleteMessageForEveryone(db: Db, actorId: number, chatId: number, msgId: number): void {
   assertMember(db, chatId, actorId);
-  const row = db.prepare('SELECT id, sender_id, chat_id FROM messages WHERE id = ? AND chat_id = ?').get(msgId, chatId) as
-    | { id: number; sender_id: number; chat_id: number }
+  const row = db.prepare('SELECT id, sender_id, chat_id, deleted_at FROM messages WHERE id = ? AND chat_id = ?').get(msgId, chatId) as
+    | { id: number; sender_id: number; chat_id: number; deleted_at: number | null }
     | undefined;
-  if (!row) return; // already gone — idempotent
+  if (!row || row.deleted_at) return; // gone or already deleted — idempotent
   const chat = db.prepare('SELECT type FROM chats WHERE id = ?').get(chatId) as { type: string } | undefined;
   const isSender = row.sender_id === actorId;
   const isGroupAdmin = chat?.type === 'group' && isAdmin(db, chatId, actorId);
   if (!isSender && !isGroupAdmin) throw new Forbidden('Only the sender or a group admin can delete for everyone');
-  db.prepare('DELETE FROM messages WHERE id = ?').run(msgId);
+  db.prepare('UPDATE messages SET deleted_at = ? WHERE id = ?').run(Date.now(), msgId);
 }
 
 /** Delete for me: the message stays for everyone else, hidden only for the actor. */

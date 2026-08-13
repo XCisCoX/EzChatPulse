@@ -60,7 +60,7 @@ export const api = {
       body: JSON.stringify({ username, password }),
     }),
   me: () => request<{ user: UserDTO }>('/api/me'),
-  updateMe: (body: { displayName?: string; currentPassword?: string; newPassword?: string }) =>
+  updateMe: (body: { displayName?: string; currentPassword?: string; newPassword?: string; email?: string }) =>
     request<{ user: UserDTO }>('/api/me', {
       method: 'PATCH',
       headers: { 'content-type': 'application/json' },

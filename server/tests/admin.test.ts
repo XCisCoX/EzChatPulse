@@ -146,3 +146,86 @@ test('admin users list includes online state', async () => {
   assert.equal(users[0].online, false);
   assert.ok('lastSeenAt' in users[0]);
 });
+
+// ── Soft-delete retention / cleanup ────────────────────────────────────
+
+async function sendMsg(port: number, token: string, cid: number, text: string): Promise<number> {
+  const { WebSocket } = await import('ws');
+  const ws = new WebSocket(`ws://127.0.0.1:${port}/ws`);
+  const msgId = await new Promise<number>((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error('ws timeout')), 4000);
+    ws.on('open', () => ws.send(JSON.stringify({ t: 'auth', token })));
+    ws.on('message', (d) => {
+      const m = JSON.parse(String(d));
+      if (m.t === 'ready') ws.send(JSON.stringify({ t: 'msg.send', cid, tempId: 't' + Math.random(), kind: 'text', text }));
+      if (m.t === 'msg.ack') { clearTimeout(t); ws.close(); resolve(m.msg.id); }
+    });
+    ws.on('error', reject);
+  });
+  return msgId;
+}
+
+test('deleted-for-everyone rows are retained but hidden; admin cleanup purges them', async () => {
+  const admin = await registerUser(ctx, 'admin', 'Admin', 'password123');
+  const bob = await registerUser(ctx, 'bob', 'Bob', 'password123');
+  const chatRes = await authed('/api/chats', admin.token, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ type: 'private', userId: bob.user.id }),
+  });
+  const chatId = ((await chatRes.json()) as any).chatId as number;
+
+  // two messages; delete the newer one for everyone
+  const m1 = await sendMsg(ctx.port, admin.token, chatId, 'keep me');
+  const m2 = await sendMsg(ctx.port, admin.token, chatId, 'delete me');
+  const { WebSocket } = await import('ws');
+  const ws = new WebSocket(`ws://127.0.0.1:${ctx.port}/ws`);
+  await new Promise((res) => {
+    ws.on('open', () => ws.send(JSON.stringify({ t: 'auth', token: admin.token })));
+    ws.on('message', (d) => { if (JSON.parse(String(d)).t === 'ready') res(); });
+  });
+  ws.send(JSON.stringify({ t: 'msg.delete', cid: chatId, msgId: m2, mode: 'everyone' }));
+  await new Promise((res) => setTimeout(res, 200));
+  ws.close();
+
+  // hidden from history for both users, but the DB row still exists (retained)
+  const hist = (await (await authed(`/api/chats/${chatId}/messages`, admin.token)).json()) as any;
+  assert.ok(!hist.messages.some((m: any) => m.id === m2), 'deleted message hidden from history');
+  assert.ok(hist.messages.some((m: any) => m.id === m1), 'other message still visible');
+  const row = (ctx.db.prepare('SELECT deleted_at FROM messages WHERE id = ?').get(m2) as any) as {
+    deleted_at: number | null;
+  };
+  assert.ok(row.deleted_at, 'row retained with deleted_at flag');
+
+  // admin stats count it
+  const stats = (await (await authed('/api/admin/stats', admin.token)).json()) as any;
+  assert.equal(stats.deletedMessages, 1);
+
+  // preview/read counts ignore it: admin chat shows m1 as the last message
+  const chats = (await (await authed('/api/chats', admin.token)).json()) as any;
+  const chat = chats.chats.find((c: any) => c.id === chatId);
+  assert.equal(chat.lastMessage.id, m1, 'sidebar preview falls back to the previous message');
+
+  // cleanup with days=0 purges everything flagged; recent-only keeps it
+  const keep = await authed('/api/admin/cleanup-deleted', admin.token, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ days: 3650 }),
+  });
+  assert.equal(((await keep.json()) as any).deleted, 0, 'nothing older than 3650 days yet');
+  const purge = await authed('/api/admin/cleanup-deleted', admin.token, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ days: 0 }),
+  });
+  assert.equal(((await purge.json()) as any).deleted, 1, 'days=0 purges the flagged row');
+  assert.ok(!ctx.db.prepare('SELECT 1 FROM messages WHERE id = ?').get(m2), 'row physically gone');
+
+  // cleanup is admin-only
+  const asBob = await authed('/api/admin/cleanup-deleted', bob.token, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ days: 0 }),
+  });
+  assert.equal(asBob.status, 403);
+});

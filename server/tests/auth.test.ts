@@ -292,3 +292,82 @@ test('password change: wrong current rejected, new password works for login', as
   });
   assert.equal(newLogin.status, 200);
 });
+
+// ── Email capture ──────────────────────────────────────────────────────
+
+test('email can be set once; second attempt rejected; invalid format rejected', async () => {
+  const alice = await registerUser(ctx, 'alice', 'Alice', 'password123');
+
+  // invalid format
+  const bad = await authed('/api/me', alice.token, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ email: 'not-an-email' }),
+  });
+  assert.equal(bad.status, 400);
+
+  // set once
+  const ok = await authed('/api/me', alice.token, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ email: 'alice@example.com' }),
+  });
+  assert.equal(ok.status, 200);
+  const body = (await ok.json()) as any;
+  assert.equal(body.user.email, 'alice@example.com');
+  assert.equal(body.user.emailVerified, false, 'no verification flow yet');
+
+  // /api/me returns it privately
+  const me = (await (await authed('/api/me', alice.token)).json()) as any;
+  assert.equal(me.user.email, 'alice@example.com');
+
+  // cannot change it afterwards
+  const again = await authed('/api/me', alice.token, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ email: 'other@example.com' }),
+  });
+  assert.equal(again.status, 400);
+});
+
+test('email is never leaked into public DTOs (search, members)', async () => {
+  const alice = await registerUser(ctx, 'alice', 'Alice', 'password123');
+  await authed('/api/me', alice.token, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ email: 'alice@example.com' }),
+  });
+
+  // user search must not include email
+  const search = await (await authed('/api/users?q=alice', alice.token)).json();
+  const found = search.users.find((u: any) => u.username === 'alice') as any;
+  assert.ok(found, 'search finds the user');
+  assert.equal('email' in found, false, 'email must not be in search results');
+  assert.equal('emailVerified' in found, false);
+
+  // chat members must not include email either
+  const bob = await registerUser(ctx, 'bob', 'Bob', 'password123');
+  const chat = await authed('/api/chats', alice.token, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ type: 'private', userId: bob.user.id }),
+  });
+  const chatId = ((await chat.json()) as any).chatId as number;
+  const detail = (await (await authed(`/api/chats/${chatId}`, alice.token)).json()) as any;
+  for (const m of detail.chat.members) {
+    assert.equal('email' in m, false, 'members must not carry email');
+  }
+});
+
+test('registration accepts an optional email', async () => {
+  const res = await api('/api/register', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ username: 'mailuser', displayName: 'Mail User', password: 'password123', email: 'mail@example.com' }),
+  });
+  assert.equal(res.status, 201);
+  const body = (await res.json()) as any;
+  assert.equal('email' in body.user, false, 'register response stays public (no email)');
+  const me = (await (await authed('/api/me', body.token)).json()) as any;
+  assert.equal(me.user.email, 'mail@example.com');
+});

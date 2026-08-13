@@ -15,6 +15,14 @@ export interface UserDTO {
   createdAt: number;
 }
 
+/** Private profile shape — only ever returned to the user themselves. */
+export interface PrivateUser extends UserDTO {
+  email: string | null;
+  emailVerified: boolean;
+}
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 function toDTO(row: {
   id: number;
   username: string;
@@ -24,12 +32,32 @@ function toDTO(row: {
   return { id: row.id, username: row.username, displayName: row.display_name, createdAt: row.created_at };
 }
 
+export function toPrivateDTO(row: {
+  id: number;
+  username: string;
+  display_name: string;
+  created_at: number;
+  email: string | null;
+  email_verified: number;
+}): PrivateUser {
+  return {
+    ...toDTO(row),
+    email: row.email ?? null,
+    emailVerified: row.email_verified === 1,
+  };
+}
+
+export function isValidEmail(email: string): boolean {
+  return email.length <= 254 && EMAIL_RE.test(email);
+}
+
 // ── Registration ───────────────────────────────────────────────────────
 export function register(
   db: Db,
   username: string,
   displayName: string,
   password: string,
+  email?: string,
 ): { token: string; user: UserDTO } {
   if (!/^[a-zA-Z0-9_]{3,32}$/.test(username)) {
     throw new BadRequest('Username must be 3–32 alphanumeric characters or underscores');
@@ -37,14 +65,18 @@ export function register(
   if (password.length < 8) {
     throw new BadRequest('Password must be at least 8 characters');
   }
+  const cleanEmail = email?.trim() ?? '';
+  if (cleanEmail && !isValidEmail(cleanEmail)) {
+    throw new BadRequest('Invalid email address');
+  }
   const existing = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
   if (existing) throw new Conflict('Username is already taken');
 
   const hash = bcrypt.hashSync(password, SALT_ROUNDS);
   const now = Date.now();
   const info = db
-    .prepare('INSERT INTO users (username, display_name, password_hash, created_at) VALUES (?, ?, ?, ?)')
-    .run(username, displayName, hash, now);
+    .prepare('INSERT INTO users (username, display_name, password_hash, created_at, email, email_verified) VALUES (?, ?, ?, ?, ?, 0)')
+    .run(username, displayName, hash, now, cleanEmail || null);
 
   const user = toDTO({ id: Number(info.lastInsertRowid), username, display_name: displayName, created_at: now });
   const token = jwt.sign({ sub: user.id }, config.jwtSecret, { expiresIn: '7d' });
@@ -98,6 +130,34 @@ export function changePassword(db: Db, userId: number, current: string, next: st
   if (!bcrypt.compareSync(current, row.password_hash)) throw new BadRequest('Current password is incorrect');
   if (next.length < 8) throw new BadRequest('New password must be at least 8 characters');
   db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(bcrypt.hashSync(next, SALT_ROUNDS), userId);
+}
+
+/**
+ * Set the account email — allowed exactly once (email cannot be changed normally,
+ * per spec: users without an email get one chance to set it).
+ */
+export function setEmail(db: Db, userId: number, email: string): PrivateUser {
+  const row = db
+    .prepare('SELECT id, username, display_name, created_at, email, email_verified FROM users WHERE id = ?')
+    .get(userId) as
+    | { id: number; username: string; display_name: string; created_at: number; email: string | null; email_verified: number }
+    | undefined;
+  if (!row) throw new Unauthorized('User not found');
+  if (row.email) throw new BadRequest('Email is already set and cannot be changed');
+  const clean = email.trim();
+  if (!isValidEmail(clean)) throw new BadRequest('Invalid email address');
+  db.prepare('UPDATE users SET email = ? WHERE id = ?').run(clean, userId);
+  return toPrivateDTO({ ...row, email: clean });
+}
+
+/** Private profile (with email) — only for /api/me responses to the user themselves. */
+export function getPrivateUser(db: Db, id: number): PrivateUser | null {
+  const row = db
+    .prepare('SELECT id, username, display_name, created_at, email, email_verified FROM users WHERE id = ?')
+    .get(id) as
+    | { id: number; username: string; display_name: string; created_at: number; email: string | null; email_verified: number }
+    | undefined;
+  return row ? toPrivateDTO(row) : null;
 }
 
 export function searchUsers(db: Db, query: string): UserDTO[] {

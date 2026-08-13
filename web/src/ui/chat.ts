@@ -192,6 +192,35 @@ export function mountChatPane(): void {
     }
     bubble.appendChild(bubbleContent(msg));
 
+    // reply quote: preview of the original message, click → scroll to it
+    if (msg.replyTo) {
+      const target = chat.messages.find((m) => m.id === msg.replyTo);
+      const quote = document.createElement('div');
+      quote.className = 'msg-quote';
+      if (target) {
+        const qSender = document.createElement('div');
+        qSender.className = 'msg-quote-sender';
+        qSender.textContent =
+          chat.members.find((m) => m.userId === target.senderId)?.displayName ?? `user ${target.senderId}`;
+        const qText = document.createElement('div');
+        qText.className = 'msg-quote-text';
+        qText.textContent = previewOf(target);
+        quote.append(qSender, qText);
+        quote.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const row = messagesEl.querySelector<HTMLElement>(`.msg-row[data-key="m:${target.id}"]`);
+          if (!row) return;
+          row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          row.classList.add('flash');
+          setTimeout(() => row.classList.remove('flash'), 1600);
+        });
+      } else {
+        quote.classList.add('msg-quote-gone');
+        quote.textContent = 'Original message';
+      }
+      bubble.insertBefore(quote, bubble.querySelector('.msg-content'));
+    }
+
     const meta = document.createElement('div');
     meta.className = 'msg-meta';
     const time = document.createElement('span');
@@ -374,6 +403,13 @@ export function mountChatPane(): void {
 
     const menu = document.createElement('div');
     menu.className = 'ctx-menu';
+    menu.appendChild(
+      menuItem('↩ Reply', false, () => {
+        closeMessageMenu();
+        setReplyingTo(msg);
+        input.focus();
+      }),
+    );
     if (canEdit) {
       menu.appendChild(
         menuItem('✎ Edit', false, () => {
@@ -429,6 +465,7 @@ export function mountChatPane(): void {
   function renderChat(chat: UIChat): void {
     closeMessageMenu();
     emojiPanel.close();
+    setReplyingTo(null);
     currentChatId = chat.id;
     chatPane.classList.remove('hidden');
     emptyState.classList.add('hidden');
@@ -550,10 +587,13 @@ export function mountChatPane(): void {
 
   // ── composer ──────────────────────────────────────────────────────────
   composerEl.innerHTML = `
-    <button id="attach-btn" class="icon-btn attach-btn" title="Attach file">＋</button>
-    <button id="emoji-btn" class="icon-btn emoji-btn" title="Emoji">😊</button>
-    <textarea id="msg-input" rows="1" dir="auto" placeholder="Message" maxlength="4096"></textarea>
-    <button id="send-btn" class="send-btn" title="Send">➤</button>
+    <div id="reply-bar" class="reply-bar hidden"></div>
+    <div id="composer-row">
+      <button id="attach-btn" class="icon-btn attach-btn" title="Attach file">＋</button>
+      <button id="emoji-btn" class="icon-btn emoji-btn" title="Emoji">😊</button>
+      <textarea id="msg-input" rows="1" dir="auto" placeholder="Message" maxlength="4096"></textarea>
+      <button id="send-btn" class="send-btn" title="Send">➤</button>
+    </div>
     <input type="file" id="file-input" hidden />
     <div id="upload-progress" class="hidden"><div id="upload-bar"></div></div>
   `;
@@ -565,6 +605,37 @@ export function mountChatPane(): void {
   const progressWrap = $('#upload-progress') as HTMLDivElement;
   const progressBar = $('#upload-bar') as HTMLDivElement;
   const emojiPanel = mountEmojiPanel(input, composerEl);
+
+  // ── reply state ───────────────────────────────────────────────────────
+  let replyingTo: UIMessage | null = null;
+  const replyBar = document.querySelector('#reply-bar') as HTMLDivElement;
+  const replyInfo = document.createElement('div');
+  replyInfo.className = 'reply-info';
+  const replyClose = document.createElement('button');
+  replyClose.className = 'reply-close';
+  replyClose.textContent = '✕';
+  replyClose.title = 'Cancel reply';
+  replyClose.addEventListener('click', () => setReplyingTo(null));
+  replyBar.append(replyInfo, replyClose);
+
+  function previewOf(msg: UIMessage): string {
+    if (msg.deletedAt) return 'This message was deleted';
+    if (msg.kind === 'image') return '[Photo]';
+    if (msg.kind === 'file' && msg.file) return `[File: ${msg.file.name}]`;
+    return msg.text ?? '';
+  }
+
+  function setReplyingTo(msg: UIMessage | null): void {
+    replyingTo = msg;
+    if (msg) {
+      const chat = store.activeChat();
+      const sender = chat?.members.find((m) => m.userId === msg.senderId)?.displayName ?? 'Unknown';
+      replyInfo.textContent = `↩ ${sender}: ${previewOf(msg)}`;
+      replyBar.classList.remove('hidden');
+    } else {
+      replyBar.classList.add('hidden');
+    }
+  }
 
   function autoGrow(): void {
     input.style.height = 'auto';
@@ -581,7 +652,7 @@ export function mountChatPane(): void {
     }
   });
 
-  function sendText(chatId: number, text: string, tempId?: string): void {
+  function sendText(chatId: number, text: string, tempId?: string, replyTo?: number): void {
     const t = tempId ?? `tmp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     if (!tempId) {
       store.addMessage(chatId, {
@@ -591,23 +662,24 @@ export function mountChatPane(): void {
         kind: 'text',
         text,
         file: null,
-        replyTo: null,
+        replyTo: replyTo ?? null,
         createdAt: Date.now(),
         tempId: t,
         pending: true,
       });
     }
-    socket.send({ t: 'msg.send', cid: chatId, tempId: t, kind: 'text', text });
+    socket.send({ t: 'msg.send', cid: chatId, tempId: t, kind: 'text', text, replyTo });
   }
 
   function send(): void {
     const chat = store.activeChat();
     const text = input.value.trim();
     if (!chat || !text) return;
-    sendText(chat.id, text);
+    sendText(chat.id, text, undefined, replyingTo?.id);
     input.value = '';
     autoGrow();
     emojiPanel.close();
+    setReplyingTo(null);
   }
 
   sendBtn.addEventListener('click', send);
