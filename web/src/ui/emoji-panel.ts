@@ -88,7 +88,5 @@ export function mountEmojiPanel(input: HTMLTextAreaElement, host: HTMLElement): 
     if (e.key === 'Escape' && open) closePanel();
   });
 
-  window.addEventListener('scroll', closePanel, true);
-
   return { close: closePanel };
 }
