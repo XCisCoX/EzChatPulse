@@ -27,6 +27,8 @@
 | CP-17 | Delete-for-everyone leaves a WhatsApp-style tombstone — should vanish | 🔸 minor | bug | ✅ verified | message delete |
 | CP-18 | Deleted message still shows its content in the chat-list preview | 🔸 minor | bug | ✅ verified | sidebar preview |
 | CP-19 | 'edited' label unreadable on colorful bubbles (too dark) | 🔹 cosmetic | bug | ✅ verified | message meta |
+| CP-20 | On phone, Enter sends instead of inserting a newline | 🔸 minor | bug | ✅ verified | composer / mobile |
+| CP-21 | Group sender-name gradient spans the bubble width, not the name | 🔹 cosmetic | bug | ✅ verified | group bubbles |
 
 ---
 
@@ -207,6 +209,24 @@ with the menu opening above it. Verified live (commit `d49f0a7`).
 
 ---
 
+## CP-20, CP-21 — testing-with-friends round (Aug 9) ✅
+
+Two findings from real friend testing (commit `b8f9b7a`), both verified live:
+
+- **CP-20 — mobile newline:** phone keyboards have no Shift, so Enter always
+  sent. Now: on coarse-pointer devices (phones/tablets) Enter inserts a
+  newline and sending is via the ➤ button; on desktop Enter sends,
+  Shift+Enter / Ctrl+Enter make a newline. Also added an `isComposing` guard so
+  IME input (Persian etc.) never sends mid-composition. Verified: desktop
+  Enter sends, Shift/Ctrl+Enter newline, emulated-coarse Enter newline with no
+  send.
+- **CP-21 — group sender-name gradient:** `.msg-sender` is a block, so the
+  gradient spanned the whole bubble and shifted with message width. Now
+  `display: inline-block; width: fit-content` — the gradient spans exactly the
+  name. Verified: name 73px vs bubble 146px in a live group chat.
+
+---
+
 ## CP-15 — False unread: your own message shows as '1' after refresh
 
 - **Reported:** Aug 7. Send a message in a chat, refresh → the chat shows an
@@ -293,6 +313,7 @@ Tests updated to the hard-delete semantics (55/55 green).
 | ~~Admin panel~~ | ✅ DONE Aug 9 — see "Feature round 3" below (monitor + manage) |
 | ~~Emoji panel~~ | ✅ DONE Aug 9 — see "Feature round 4" below |
 | Leave / delete group | leave = remove self + eviction events; delete = admin destroys chat |
+| Reply to messages 🆕 | quote/reply to a specific message (reply_to already stored server-side!) |
 
 ### Feature round 4 — Aug 9: emoji panel ✅
 
