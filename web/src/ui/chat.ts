@@ -612,7 +612,10 @@ export function mountChatPane(): void {
 
   sendBtn.addEventListener('click', send);
   input.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key !== 'Enter' || e.isComposing) return;
+    // phones have no Shift — Enter must insert a newline there (send via ➤)
+    if (window.matchMedia('(pointer: coarse)').matches) return;
+    if (!e.shiftKey && !e.ctrlKey && !e.metaKey) {
       e.preventDefault();
       send();
     }
