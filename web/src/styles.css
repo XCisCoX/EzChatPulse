@@ -976,7 +976,88 @@ textarea::placeholder {
   animation: shake 0.35s;
 }
 
-/* ── Modals ─────────────────────────────────────────────────────────── */
+/* ── emoji panel ──────────────────────────────────────────────────────── */
+
+#composer {
+  position: relative;
+}
+
+.emoji-panel {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 0;
+  width: 330px;
+  max-width: calc(100vw - 24px);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  background: rgba(18, 23, 44, 0.97);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 14px 44px rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(14px);
+  z-index: 30;
+}
+
+.emoji-panel.hidden {
+  display: none;
+}
+
+.emoji-cats {
+  display: flex;
+  gap: 2px;
+  flex-wrap: wrap;
+}
+
+.emoji-cat-btn {
+  border: none;
+  background: none;
+  font-size: 16px;
+  line-height: 1;
+  padding: 4px 6px;
+  border-radius: 8px;
+  cursor: pointer;
+  filter: grayscale(0.85) opacity(0.6);
+  transition: filter 0.12s, background 0.12s;
+}
+
+.emoji-cat-btn:hover {
+  filter: none;
+  background: var(--glass-hover);
+}
+
+.emoji-cat-btn.active {
+  filter: none;
+  background: rgba(168, 85, 247, 0.22);
+}
+
+.emoji-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 2px;
+  overflow-y: auto;
+  max-height: 196px;
+  padding-right: 2px;
+}
+
+.emoji-cell {
+  border: none;
+  background: none;
+  font-size: 20px;
+  line-height: 1.4;
+  padding: 2px 0;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.1s, transform 0.08s;
+}
+
+.emoji-cell:hover {
+  background: var(--glass-hover);
+  transform: scale(1.2);
+}
+
+/* ── modals ─────────────────────────────────────────────────────────── */
 
 .modal-overlay {
   position: fixed;

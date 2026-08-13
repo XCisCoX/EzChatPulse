@@ -4,6 +4,7 @@ import { socket } from '../ws';
 import { loadMore } from '../actions';
 import { avatarEl, formatTime, formatLastSeen, formatBytes, isImageMime } from './format';
 import { openModal, toast } from './toast';
+import { mountEmojiPanel } from './emoji-panel';
 import type { UIChat, UIMessage, MemberInfo } from '../types';
 
 let currentChatId: number | null = null;
@@ -427,6 +428,7 @@ export function mountChatPane(): void {
   // ── rendering ─────────────────────────────────────────────────────────
   function renderChat(chat: UIChat): void {
     closeMessageMenu();
+    emojiPanel.close();
     currentChatId = chat.id;
     chatPane.classList.remove('hidden');
     emptyState.classList.add('hidden');
@@ -549,6 +551,7 @@ export function mountChatPane(): void {
   // ── composer ──────────────────────────────────────────────────────────
   composerEl.innerHTML = `
     <button id="attach-btn" class="icon-btn attach-btn" title="Attach file">＋</button>
+    <button id="emoji-btn" class="icon-btn emoji-btn" title="Emoji">😊</button>
     <textarea id="msg-input" rows="1" dir="auto" placeholder="Message" maxlength="4096"></textarea>
     <button id="send-btn" class="send-btn" title="Send">➤</button>
     <input type="file" id="file-input" hidden />
@@ -561,6 +564,7 @@ export function mountChatPane(): void {
   const fileInput = $('#file-input') as HTMLInputElement;
   const progressWrap = $('#upload-progress') as HTMLDivElement;
   const progressBar = $('#upload-bar') as HTMLDivElement;
+  const emojiPanel = mountEmojiPanel(input, composerEl);
 
   function autoGrow(): void {
     input.style.height = 'auto';
@@ -603,6 +607,7 @@ export function mountChatPane(): void {
     sendText(chat.id, text);
     input.value = '';
     autoGrow();
+    emojiPanel.close();
   }
 
   sendBtn.addEventListener('click', send);
