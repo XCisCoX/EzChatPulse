@@ -291,8 +291,30 @@ Tests updated to the hard-delete semantics (55/55 green).
 | ~~Message edit / delete~~ | ✅ DONE Aug 7 + UX round Aug 9 |
 | ~~User settings~~ | ✅ DONE Aug 9 — see "Feature round 2" below |
 | ~~Admin panel~~ | ✅ DONE Aug 9 — see "Feature round 3" below (monitor + manage) |
-| Emoji panel | picker in the composer (needs a small emoji dataset + popover) |
+| ~~Emoji panel~~ | ✅ DONE Aug 9 — see "Feature round 4" below |
 | Leave / delete group | leave = remove self + eviction events; delete = admin destroys chat |
+
+### Feature round 4 — Aug 9: emoji panel ✅
+
+Commit `ac3adb7` (+ `c9c5f53` fix), all live browser checks passed.
+
+- Curated offline emoji set (no external dependency): 8 categories — Smileys,
+  Gestures, Hearts, Animals, Food, Activity, Objects, Symbols (~400 emojis).
+- 😊 button in the composer toggles the panel above the input; category tabs;
+  clicking an emoji inserts it **at the cursor** (works mid-text).
+- Dismiss: outside click, Esc, after sending, or switching chats.
+- Pitfall found live: a scroll-close listener was killing the panel on every
+  insert — `input.focus()` + autoGrow fires a real scroll event. The panel is
+  anchored to the composer, so scroll-close was removed (outside click/Esc
+  suffice).
+
+### Backlog — Aug 9 additions (from bugs-n-stuff.txt)
+
+| Item | Notes |
+|------|-------|
+| Soft-delete retention | keep deleted-for-everyone rows N days (flagged, excluded from normal queries), admin "clean up deleted > N days" button. No mechanism needed now. |
+| Per-user storage quota | keep upload cap (maybe tighter) + per-user storage space; admin-editable quota; users add/remove/replace files and share them (distinct bubble style); per-file public/private flag. Needs a file-management UX + schema work. |
+| Email capture | store email on login/profile + verified flag, so email password reset is possible later; current users without email get a chance to set it once. Pairs with the parked email-reset feature. |
 
 ### Feature round 3 — Aug 9: admin panel ✅
 
