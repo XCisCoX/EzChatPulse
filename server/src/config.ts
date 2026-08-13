@@ -50,3 +50,15 @@ export const config: Config = (() => {
     authRatePerMin: Number(process.env.AUTH_RATE_PER_MIN ?? 10),
   };
 })();
+
+/**
+ * Admin flag — comma-separated usernames via ADMIN_USERNAMES env.
+ * Read lazily so tests (and restarts) can set it at any time.
+ */
+export function isAdminUsername(username: string): boolean {
+  return (process.env.ADMIN_USERNAMES ?? '')
+    .split(',')
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean)
+    .includes(username.toLowerCase());
+}

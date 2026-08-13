@@ -9,6 +9,7 @@ import authRoutes from '../src/api/auth_routes.js';
 import userRoutes from '../src/api/user_routes.js';
 import chatRoutes from '../src/api/chat_routes.js';
 import fileRoutes from '../src/api/file_routes.js';
+import adminRoutes from '../src/api/admin_routes.js';
 import { handleConnection } from '../src/ws/handler.js';
 
 export interface TestContext {
@@ -33,6 +34,7 @@ export function createTestContext(): Promise<TestContext> {
   app.use('/api', chatRoutes);
   app.use('/api', fileRoutes);
   app.use('/api/users', userRoutes);
+  app.use('/api/admin', adminRoutes);
   app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
     if (err instanceof AppError) {
       res.status(err.statusCode).json({ error: err.message });

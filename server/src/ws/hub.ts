@@ -30,6 +30,13 @@ export function connectionCount(userId: number): number {
   return connections.get(userId)?.size ?? 0;
 }
 
+/** Total live sockets across all users (admin stats). */
+export function totalConnections(): number {
+  let n = 0;
+  for (const set of connections.values()) n += set.size;
+  return n;
+}
+
 /** Send a JSON event to all sockets of one user (e.g. chat removal notice). */
 export function sendToUser(userId: number, event: object): number {
   const payload = JSON.stringify(event);

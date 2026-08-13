@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import type { Request, Response, NextFunction } from 'express';
-import { getDb } from '../db.js';
+import { getDb, getSetting } from '../db.js';
 import { register, login, requireAuth, getUserById, updateDisplayName, changePassword } from '../auth.js';
 import { isOnline, broadcastUserUpdate } from '../ws/hub.js';
 import { rateLimit } from '../rate-limit.js';
@@ -26,6 +26,10 @@ function authLimiter(req: Request, res: Response, next: NextFunction): void {
 }
 
 router.post('/register', authLimiter, wrap(async (req, res) => {
+  if (getSetting(getDb(), 'registration_open', process.env.REGISTRATION_OPEN ?? 'true') !== 'true') {
+    res.status(403).json({ error: 'Registration is currently closed' });
+    return;
+  }
   const { username, displayName, password } = req.body;
   if (!username || !displayName || !password) {
     res.status(400).json({ error: 'username, displayName, and password are required' });

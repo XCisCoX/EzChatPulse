@@ -12,6 +12,7 @@ import authRoutes from './api/auth_routes.js';
 import userRoutes from './api/user_routes.js';
 import chatRoutes from './api/chat_routes.js';
 import fileRoutes from './api/file_routes.js';
+import adminRoutes from './api/admin_routes.js';
 import { handleConnection } from './ws/handler.js';
 import { flushAll } from './presence.js';
 
@@ -28,6 +29,13 @@ app.use('/api', authRoutes);
 app.use('/api', chatRoutes);
 app.use('/api', fileRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/admin', adminRoutes);
+
+// Admin console (hidden from normal users; only admins can authenticate)
+const adminPage = path.resolve(import.meta.dirname, '../admin-page.html');
+app.get('/admin', (_req, res) => {
+  res.sendFile(adminPage);
+});
 
 // Serve the built web client (single deployment: `npm run build && npm start`)
 const webDist = path.resolve(import.meta.dirname, '../../web/dist');

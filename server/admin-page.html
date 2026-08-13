@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ChatPulse — Admin</title>
+<style>
+  :root {
+    --bg: #0b0f1e;
+    --panel: #141a30;
+    --border: rgba(255, 255, 255, 0.08);
+    --text: #e6e9f5;
+    --muted: #8b93ad;
+    --grad: linear-gradient(135deg, #7c3aed, #a855f7);
+    --green: #34d399;
+    --red: #ef4444;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 32px 16px;
+  }
+  .wrap { max-width: 900px; margin: 0 auto; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: 13px; margin-bottom: 24px; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; margin-bottom: 24px; }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 14px 16px;
+  }
+  .card .num { font-size: 24px; font-weight: 700; }
+  .card .lbl { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .card .ok { color: var(--green); font-size: 13px; font-weight: 600; }
+  .card .off { color: var(--red); font-size: 13px; font-weight: 600; }
+  table { width: 100%; border-collapse: collapse; background: var(--panel); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; }
+  th, td { text-align: left; padding: 10px 12px; font-size: 13px; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 600; font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.4px; }
+  tr:last-child td { border-bottom: none; }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+  .dot.on { background: var(--green); }
+  .dot.off { background: var(--muted); }
+  button {
+    border: none;
+    border-radius: 9px;
+    padding: 6px 12px;
+    font-size: 12.5px;
+    font-weight: 600;
+    cursor: pointer;
+    background: var(--grad);
+    color: #fff;
+  }
+  button.ghost { background: rgba(255,255,255,0.08); color: var(--text); }
+  button.danger { background: rgba(239,68,68,0.15); color: var(--red); }
+  .toolbar { display: flex; gap: 10px; align-items: center; margin-bottom: 20px; flex-wrap: wrap; }
+  input {
+    background: #0d1226;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    color: var(--text);
+    padding: 8px 12px;
+    font: inherit;
+    font-size: 13.5px;
+  }
+  .hidden { display: none !important; }
+  #login-box { max-width: 320px; margin: 80px auto; background: var(--panel); border: 1px solid var(--border); border-radius: 16px; padding: 24px; display: flex; flex-direction: column; gap: 12px; }
+  #login-box h2 { margin: 0; font-size: 18px; }
+  .toast { position: fixed; bottom: 20px; right: 20px; background: var(--panel); border: 1px solid var(--border); padding: 12px 16px; border-radius: 12px; font-size: 13.5px; z-index: 10; }
+  .muted { color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>ChatPulse Admin</h1>
+  <div class="sub">Monitor &amp; manage — only accessible to users on the <code>ADMIN_USERNAMES</code> list.</div>
+
+  <div id="login-box">
+    <h2>Sign in</h2>
+    <input id="a-user" placeholder="Username" autocomplete="username" />
+    <input id="a-pass" type="password" placeholder="Password" autocomplete="current-password" />
+    <button id="a-login">Sign in</button>
+    <div class="muted" style="font-size:12px">Must be an admin account (set via ADMIN_USERNAMES env).</div>
+  </div>
+
+  <div id="app" class="hidden">
+    <div class="toolbar">
+      <button id="btn-reg" class="danger">…</button>
+      <span class="muted" style="font-size:12px">registration kill-switch</span>
+      <span style="flex:1"></span>
+      <button id="btn-refresh" class="ghost">Refresh</button>
+      <button id="btn-logout" class="ghost">Log out</button>
+    </div>
+
+    <div class="cards" id="cards"></div>
+
+    <table>
+      <thead><tr><th>User</th><th>Username</th><th>Status</th><th>Last seen</th><th>Joined</th><th></th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+(() => {
+  const TOKEN_KEY = 'chatpulse.admin.token';
+  const $ = (s) => document.querySelector(s);
+  const loginBox = $('#login-box');
+  const app = $('#app');
+
+  function toast(msg, err) {
+    const el = document.createElement('div');
+    el.className = 'toast';
+    el.textContent = msg;
+    el.style.borderColor = err ? 'rgba(239,68,68,0.5)' : 'rgba(52,211,153,0.5)';
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 3200);
+  }
+
+  async function api(path, opts = {}) {
+    const headers = { 'content-type': 'application/json', ...(opts.headers || {}) };
+    const token = localStorage.getItem(TOKEN_KEY);
+    if (token) headers.authorization = 'Bearer ' + token;
+    const res = await fetch(path, { ...opts, headers });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      if (res.status === 401 || res.status === 403) { showLogin(); }
+      throw new Error(body.error || res.statusText);
+    }
+    return body;
+  }
+
+  function fmtBytes(n) {
+    if (n < 1024) return n + ' B';
+    if (n < 1048576) return (n / 1024).toFixed(1) + ' KB';
+    return (n / 1048576).toFixed(2) + ' MB';
+  }
+  function fmtAgo(ts) {
+    if (!ts) return '—';
+    const s = Math.floor((Date.now() - ts) / 1000);
+    if (s < 60) return 'now';
+    if (s < 3600) return Math.floor(s / 60) + 'm ago';
+    if (s < 86400) return Math.floor(s / 3600) + 'h ago';
+    return Math.floor(s / 86400) + 'd ago';
+  }
+  function fmtDate(ts) {
+    return ts ? new Date(ts).toLocaleDateString() : '—';
+  }
+
+  function showLogin() {
+    localStorage.removeItem(TOKEN_KEY);
+    loginBox.classList.remove('hidden');
+    app.classList.add('hidden');
+  }
+
+  async function loadStats() {
+    const stats = await api('/api/admin/stats');
+    $('#cards').innerHTML = [
+      ['Users', stats.users],
+      ['Chats', stats.chats],
+      ['Messages', stats.messages],
+      ['Files', stats.files],
+      ['DB size', fmtBytes(stats.dbSizeBytes)],
+      ['Uptime', stats.uptimeSec + 's'],
+      ['Live conns', stats.connections],
+    ].map(([lbl, num]) => `<div class="card"><div class="num">${num}</div><div class="lbl">${lbl}</div></div>`).join('');
+
+    const btn = $('#btn-reg');
+    if (stats.registrationOpen) {
+      btn.textContent = 'Close registration';
+      btn.className = 'danger';
+      btn.onclick = () => setRegistration(false);
+    } else {
+      btn.textContent = 'Open registration';
+      btn.className = '';
+      btn.onclick = () => setRegistration(true);
+    }
+  }
+
+  async function loadUsers() {
+    const { users } = await api('/api/admin/users');
+    $('#rows').innerHTML = users.map((u) => `
+      <tr>
+        <td>${u.displayName.replace(/</g, '&lt;')}</td>
+        <td>@${u.username.replace(/</g, '&lt;')}</td>
+        <td><span class="dot ${u.online ? 'on' : 'off'}"></span>${u.online ? 'online' : 'offline'}</td>
+        <td>${fmtAgo(u.lastSeenAt)}</td>
+        <td>${fmtDate(u.createdAt)}</td>
+        <td style="text-align:right">
+          <button data-reset="${u.id}" data-name="${u.username}">Reset password</button>
+        </td>
+      </tr>`).join('');
+    document.querySelectorAll('[data-reset]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const next = prompt('New password for @' + btn.dataset.name + ' (min 8 chars):');
+        if (!next) return;
+        try {
+          const r = await api('/api/admin/users/' + btn.dataset.reset + '/reset-password', {
+            method: 'POST',
+            body: JSON.stringify({ newPassword: next }),
+          });
+          toast('Password reset for @' + r.username);
+        } catch (e) {
+          toast(e.message, true);
+        }
+      });
+    });
+  }
+
+  async function refresh() {
+    try {
+      await loadStats();
+      await loadUsers();
+    } catch (e) {
+      toast(e.message, true);
+    }
+  }
+
+  async function setRegistration(enabled) {
+    try {
+      await api('/api/admin/registration', { method: 'POST', body: JSON.stringify({ enabled }) });
+      await refresh();
+      toast(enabled ? 'Registration opened' : 'Registration closed');
+    } catch (e) {
+      toast(e.message, true);
+    }
+  }
+
+  $('#a-login').addEventListener('click', async () => {
+    try {
+      const res = await fetch('/api/login', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ username: $('#a-user').value, password: $('#a-pass').value }),
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error || 'Login failed');
+      // verify admin rights before storing the token
+      localStorage.setItem(TOKEN_KEY, body.token);
+      const probe = await api('/api/admin/stats');
+      if (probe) {
+        loginBox.classList.add('hidden');
+        app.classList.remove('hidden');
+        await refresh();
+        toast('Welcome, admin');
+      }
+    } catch (e) {
+      localStorage.removeItem(TOKEN_KEY);
+      toast(e.message, true);
+    }
+  });
+  $('#a-pass').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#a-login').click(); });
+  $('#btn-refresh').addEventListener('click', refresh);
+  $('#btn-logout').addEventListener('click', showLogin);
+
+  // auto-login if a valid token exists
+  if (localStorage.getItem(TOKEN_KEY)) {
+    api('/api/admin/stats').then(() => {
+      loginBox.classList.add('hidden');
+      app.classList.remove('hidden');
+      refresh();
+    }).catch(() => showLogin());
+  }
+})();
+</script>
+</body>
+</html>

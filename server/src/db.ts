@@ -24,6 +24,16 @@ const migrations: Array<{ version: number; up: (db: Db) => void }> = [
       )`);
     },
   },
+  {
+    // v3 — admin panel: key/value app settings (e.g. registration kill-switch)
+    version: 3,
+    up(db) {
+      db.exec(`CREATE TABLE IF NOT EXISTS app_settings (
+        key   TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      )`);
+    },
+  },
 ];
 
 function runMigrations(db: Db): void {
@@ -72,4 +82,17 @@ export function getDb(): Db {
   if (testDb) return testDb;
   if (!defaultDb) defaultDb = openDb(config.dbPath);
   return defaultDb;
+}
+
+// ── Key/value app settings (admin kill-switches etc.) ──────────────────
+export function getSetting(db: Db, key: string, fallback: string): string {
+  const row = db.prepare('SELECT value FROM app_settings WHERE key = ?').get(key) as { value: string } | undefined;
+  return row?.value ?? fallback;
+}
+
+export function setSetting(db: Db, key: string, value: string): void {
+  db.prepare(
+    `INSERT INTO app_settings (key, value) VALUES (?, ?)
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+  ).run(key, value);
 }
