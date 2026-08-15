@@ -10,9 +10,12 @@ import {
   createGroup,
   addMember,
   removeMember,
+  leaveGroup,
+  deleteGroup,
 } from '../services/chats.js';
 import { listMessages, markRead } from '../services/messages.js';
 import { broadcastToChat, sendToUser } from '../ws/hub.js';
+import { memberIds } from '../services/membership.js';
 
 const router = Router();
 
@@ -102,6 +105,30 @@ router.delete('/chats/:id/members', requireAuth, wrap(async (req, res) => {
 
   broadcastToChat(chatId, { t: 'chat.member', cid: chatId, action: 'removed', userId: targetUserId });
   sendToUser(targetUserId, { t: 'chat.removed', cid: chatId }); // removed user drops the chat from their UI
+  res.json({ ok: true });
+}));
+
+/** Leave a group. Last member leaving deletes the chat entirely. */
+router.post('/chats/:id/leave', requireAuth, wrap(async (req, res) => {
+  const chatId = Number(req.params.id);
+  const db = getDb();
+  const chatDeleted = leaveGroup(db, req.userId, chatId);
+  if (!chatDeleted) {
+    // remaining members get the updated member list; the leaver's devices drop the chat
+    const summary = chatSummary(db, chatId);
+    broadcastToChat(chatId, { t: 'chat.member', cid: chatId, action: 'left', userId: req.userId, chat: summary });
+  }
+  sendToUser(req.userId, { t: 'chat.removed', cid: chatId });
+  res.json({ ok: true, chatDeleted });
+}));
+
+/** Admin destroys a group — all members' devices drop it. */
+router.delete('/chats/:id', requireAuth, wrap(async (req, res) => {
+  const chatId = Number(req.params.id);
+  const db = getDb();
+  const ids = memberIds(db, chatId); // capture before the cascade wipes membership
+  deleteGroup(db, req.userId, chatId);
+  for (const id of ids) sendToUser(id, { t: 'chat.deleted', cid: chatId });
   res.json({ ok: true });
 }));
 

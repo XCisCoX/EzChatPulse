@@ -101,6 +101,16 @@ export const api = {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ userId }),
     }),
+  leaveGroup: (id: number) =>
+    request<{ ok: boolean; chatDeleted: boolean }>(`/api/chats/${id}/leave`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+    }),
+  deleteGroup: (id: number) =>
+    request<{ ok: boolean }>(`/api/chats/${id}`, {
+      method: 'DELETE',
+      headers: { 'content-type': 'application/json' },
+    }),
   upload: (file: File, onProgress?: (pct: number) => void) =>
     new Promise<{ file: FileDTO }>((resolve, reject) => {
       const fd = new FormData();

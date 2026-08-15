@@ -3,7 +3,7 @@ import { store } from '../store';
 import { socket } from '../ws';
 import { loadMore } from '../actions';
 import { avatarEl, formatTime, formatLastSeen, formatBytes, isImageMime } from './format';
-import { openModal, toast } from './toast';
+import { openModal, toast, confirmDialog } from './toast';
 import { mountEmojiPanel } from './emoji-panel';
 import type { UIChat, UIMessage, MemberInfo } from '../types';
 
@@ -392,7 +392,36 @@ export function mountChatPane(): void {
     return b;
   }
 
-  /** Open the per-message menu (Edit / Delete for me / Delete for everyone). */
+  /** Confirm before a destructive delete (misclick protection). */
+  function confirmDelete(chat: UIChat, msg: UIMessage, mode: 'me' | 'everyone'): void {
+    const root = document.createElement('div');
+    root.className = 'confirm-modal';
+    const title = document.createElement('h2');
+    title.textContent = mode === 'everyone' ? 'Delete for everyone?' : 'Delete for me?';
+    const body = document.createElement('p');
+    body.textContent =
+      mode === 'everyone'
+        ? 'This removes the message for all members and cannot be undone.'
+        : 'The message will be hidden from your view only. This cannot be undone.';
+    const actions = document.createElement('div');
+    actions.className = 'confirm-actions';
+    const cancel = document.createElement('button');
+    cancel.className = 'confirm-cancel';
+    cancel.textContent = 'Cancel';
+    const del = document.createElement('button');
+    del.className = 'confirm-delete';
+    del.textContent = 'Delete';
+    const close = openModal(root);
+    cancel.addEventListener('click', close);
+    del.addEventListener('click', () => {
+      close();
+      socket.send({ t: 'msg.delete', cid: chat.id, msgId: msg.id, mode });
+    });
+    actions.append(cancel, del);
+    root.append(title, body, actions);
+  }
+
+  /** Open the per-message menu (Reply / Edit / Delete for me / Delete for everyone). */
   function openMessageMenu(chat: UIChat, msg: UIMessage, row: HTMLElement, x: number, y: number): void {
     closeMessageMenu();
     const mine = isMine(msg);
@@ -421,14 +450,14 @@ export function mountChatPane(): void {
     menu.appendChild(
       menuItem('🗑 Delete for me', false, () => {
         closeMessageMenu();
-        socket.send({ t: 'msg.delete', cid: chat.id, msgId: msg.id, mode: 'me' });
+        confirmDelete(chat, msg, 'me');
       }),
     );
     if (mine || isAdmin) {
       menu.appendChild(
         menuItem('🗑 Delete for everyone', true, () => {
           closeMessageMenu();
-          socket.send({ t: 'msg.delete', cid: chat.id, msgId: msg.id, mode: 'everyone' });
+          confirmDelete(chat, msg, 'everyone');
         }),
       );
     }
@@ -798,6 +827,8 @@ export function mountChatPane(): void {
 
 // ── members modal ───────────────────────────────────────────────────────
 function openMembersModal(chat: UIChat): void {
+  const me = store.state.session?.user.id;
+  const amAdmin = chat.members.find((m) => m.userId === me)?.role === 'admin';
   const root = document.createElement('div');
   root.className = 'members-modal';
   root.innerHTML = `
@@ -808,6 +839,10 @@ function openMembersModal(chat: UIChat): void {
       <div id="mm-results"></div>
     </div>
     <button id="mm-toggle">＋ Add member</button>
+    <div id="mm-footer">
+      <button id="mm-leave">Leave group</button>
+      ${amAdmin ? '<button id="mm-delete" class="mm-delete">Delete group</button>' : ''}
+    </div>
   `;
 
   const listEl = root.querySelector<HTMLDivElement>('#mm-list')!;
@@ -815,9 +850,6 @@ function openMembersModal(chat: UIChat): void {
   const toggleBtn = root.querySelector<HTMLButtonElement>('#mm-toggle')!;
   const qInput = root.querySelector<HTMLInputElement>('#mm-q')!;
   const resultsEl = root.querySelector<HTMLDivElement>('#mm-results')!;
-
-  const me = store.state.session?.user.id;
-  const amAdmin = chat.members.find((m) => m.userId === me)?.role === 'admin';
 
   function renderList(members: MemberInfo[]): void {
     listEl.innerHTML = '';
@@ -904,7 +936,44 @@ function openMembersModal(chat: UIChat): void {
     }, 250);
   });
 
-  openModal(root);
+  // leave / delete the group (with confirmation)
+  const leaveBtn = root.querySelector<HTMLButtonElement>('#mm-leave')!;
+  leaveBtn.addEventListener('click', async () => {
+    const ok = await confirmDialog(
+      'Leave group?',
+      amAdmin
+        ? `You are the admin — after you leave, no one can manage "${chat.name}".`
+        : `You will lose access to "${chat.name}".`,
+      'Leave',
+    );
+    if (!ok) return;
+    try {
+      await api.leaveGroup(chat.id);
+      closeModal(); // chat.removed event drops it from the sidebar
+      toast('Left the group');
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Failed to leave', 'error');
+    }
+  });
+
+  const deleteBtn = root.querySelector<HTMLButtonElement>('#mm-delete');
+  deleteBtn?.addEventListener('click', async () => {
+    const ok = await confirmDialog(
+      'Delete group?',
+      `"${chat.name}" and all its messages will be permanently deleted for everyone. Cannot be undone.`,
+      'Delete group',
+    );
+    if (!ok) return;
+    try {
+      await api.deleteGroup(chat.id);
+      closeModal(); // chat.deleted event closes the pane + removes from sidebar
+      toast('Group deleted');
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Failed to delete', 'error');
+    }
+  });
+
+  const closeModal = openModal(root);
 }
 
 // ── lightbox ────────────────────────────────────────────────────────────

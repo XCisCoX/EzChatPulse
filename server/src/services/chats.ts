@@ -127,6 +127,35 @@ export function removeMember(db: Db, actorId: number, chatId: number, targetUser
   db.prepare('DELETE FROM chat_members WHERE chat_id = ? AND user_id = ?').run(chatId, targetUserId);
 }
 
+/**
+ * A member leaves a group. If they were the last member, the chat (and all its
+ * messages/members/read state) is deleted entirely. Returns true when the chat
+ * was deleted.
+ */
+export function leaveGroup(db: Db, userId: number, chatId: number): boolean {
+  const chat = db.prepare('SELECT type FROM chats WHERE id = ?').get(chatId) as { type: string } | undefined;
+  if (!chat) throw new NotFound('Chat not found');
+  if (chat.type !== 'group') throw new BadRequest('Only group chats can be left');
+  const member = db.prepare('SELECT 1 FROM chat_members WHERE chat_id = ? AND user_id = ?').get(chatId, userId);
+  if (!member) throw new Forbidden('You are not a member of this chat');
+  const remaining = (db.prepare('SELECT COUNT(*) AS n FROM chat_members WHERE chat_id = ?').get(chatId) as { n: number }).n;
+  if (remaining <= 1) {
+    db.prepare('DELETE FROM chats WHERE id = ?').run(chatId); // cascades members/messages/read_state
+    return true;
+  }
+  db.prepare('DELETE FROM chat_members WHERE chat_id = ? AND user_id = ?').run(chatId, userId);
+  return false;
+}
+
+/** Admin destroys a group chat (cascades to messages, members, read state). */
+export function deleteGroup(db: Db, actorId: number, chatId: number): void {
+  const chat = db.prepare('SELECT type FROM chats WHERE id = ?').get(chatId) as { type: string } | undefined;
+  if (!chat) throw new NotFound('Chat not found');
+  if (chat.type !== 'group') throw new BadRequest('Only group chats can be deleted');
+  assertAdmin(db, chatId, actorId);
+  db.prepare('DELETE FROM chats WHERE id = ?').run(chatId);
+}
+
 export function listMembers(db: Db, chatId: number): MemberInfo[] {
   const rows = db
     .prepare(

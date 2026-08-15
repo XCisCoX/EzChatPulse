@@ -1150,6 +1150,60 @@ textarea::placeholder {
   transform: scale(1.2);
 }
 
+/* ── confirm modal (destructive actions) ──────────────────────────────── */
+
+.confirm-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.confirm-modal h2 {
+  font-size: 18px;
+  margin: 0;
+}
+
+.confirm-modal p {
+  font-size: 13.5px;
+  color: var(--text-1);
+  margin: 0;
+  line-height: 1.5;
+}
+
+.confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.confirm-actions button {
+  border: none;
+  border-radius: 10px;
+  padding: 8px 18px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.confirm-cancel {
+  background: var(--glass);
+  color: var(--text-1);
+}
+
+.confirm-cancel:hover {
+  background: var(--glass-hover);
+}
+
+.confirm-delete {
+  background: rgba(239, 68, 68, 0.9);
+  color: #fff;
+}
+
+.confirm-delete:hover {
+  background: #ef4444;
+}
+
 /* ── modals ─────────────────────────────────────────────────────────── */
 
 .modal-overlay {
@@ -1254,6 +1308,54 @@ textarea::placeholder {
 .set-save:disabled {
   opacity: 0.6;
   cursor: default;
+}
+
+.mm-kick {
+  margin-left: auto;
+  border: none;
+  background: rgba(239, 68, 68, 0.12);
+  color: var(--red);
+  border-radius: 8px;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.mm-kick:hover {
+  background: rgba(239, 68, 68, 0.22);
+}
+
+#mm-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+
+#mm-footer button {
+  border: none;
+  border-radius: 10px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  background: var(--glass);
+  color: var(--text-1);
+}
+
+#mm-footer button:hover {
+  background: var(--glass-hover);
+}
+
+#mm-footer .mm-delete {
+  background: rgba(239, 68, 68, 0.12);
+  color: var(--red);
+}
+
+#mm-footer .mm-delete:hover {
+  background: rgba(239, 68, 68, 0.22);
 }
 
 .set-logout {

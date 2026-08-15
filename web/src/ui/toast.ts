@@ -33,3 +33,35 @@ export function openModal(content: HTMLElement): () => void {
   });
   return close;
 }
+
+/** Promise-based confirm dialog. Resolves true when the user confirms. */
+export function confirmDialog(title: string, body: string, confirmLabel = 'Delete'): Promise<boolean> {
+  return new Promise((resolve) => {
+    const root = document.createElement('div');
+    root.className = 'confirm-modal';
+    const h = document.createElement('h2');
+    h.textContent = title;
+    const p = document.createElement('p');
+    p.textContent = body;
+    const actions = document.createElement('div');
+    actions.className = 'confirm-actions';
+    const cancel = document.createElement('button');
+    cancel.className = 'confirm-cancel';
+    cancel.textContent = 'Cancel';
+    const confirm = document.createElement('button');
+    confirm.className = 'confirm-delete';
+    confirm.textContent = confirmLabel;
+    const close = openModal(root);
+    let done = false;
+    const finish = (v: boolean): void => {
+      if (done) return;
+      done = true;
+      close();
+      resolve(v);
+    };
+    cancel.addEventListener('click', () => finish(false));
+    confirm.addEventListener('click', () => finish(true));
+    actions.append(cancel, confirm);
+    root.append(h, p, actions);
+  });
+}

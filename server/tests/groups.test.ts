@@ -208,3 +208,98 @@ test('admin cannot remove themselves', async () => {
   });
   assert.equal(res.status, 400);
 });
+
+// ── Leave & delete group ───────────────────────────────────────────────
+
+test('member leaves: removed for them, remaining members get member.left', async () => {
+  const alice = await registerUser(ctx, 'alice', 'Alice', 'password123');
+  const bob = await registerUser(ctx, 'bob', 'Bob', 'password123');
+  const carol = await registerUser(ctx, 'carol', 'Carol', 'password123');
+  const chatId = await createGroup(alice.token, 'Dev Team', [bob.user.id, carol.user.id]);
+
+  const wsA = await wsConnectAuthed(ctx.port, alice.token);
+  const wsC = await wsConnectAuthed(ctx.port, carol.token);
+
+  // Carol leaves
+  const res = await authed(`/api/chats/${chatId}/leave`, carol.token, { method: 'POST' });
+  assert.equal(res.status, 200);
+  assert.equal(((await res.json()) as any).chatDeleted, false);
+
+  // Carol's chat list no longer has it; her history access is revoked
+  const carolChats = (await (await authed('/api/chats', carol.token)).json()) as any;
+  assert.ok(!carolChats.chats.some((c: any) => c.id === chatId), 'chat gone from leaver list');
+  const hist = await authed(`/api/chats/${chatId}/messages`, carol.token);
+  assert.equal(hist.status, 403, 'leaver cannot read history');
+
+  // Alice (remaining member) got the member.left broadcast with updated members
+  const evt = await waitForMessage(wsA, (m) => m.t === 'chat.member' && m.action === 'left' && m.userId === carol.user.id);
+  assert.ok(evt.chat?.members?.length === 2, 'members list shrunk');
+  assert.ok(!evt.chat.members.some((m: any) => m.userId === carol.user.id));
+
+  wsA.close();
+  wsC.close();
+});
+
+test('last member leaving deletes the group chat', async () => {
+  const alice = await registerUser(ctx, 'alice', 'Alice', 'password123');
+  const bob = await registerUser(ctx, 'bob', 'Bob', 'password123');
+  const chatId = await createGroup(alice.token, 'Solo', [bob.user.id]);
+
+  const wsB = await wsConnectAuthed(ctx.port, bob.token);
+  const wsA = await wsConnectAuthed(ctx.port, alice.token);
+
+  // Bob leaves (1 left) → still exists; Alice leaves → deleted
+  await authed(`/api/chats/${chatId}/leave`, bob.token, { method: 'POST' });
+  await waitForMessage(wsA, (m) => m.t === 'chat.member' && m.action === 'left');
+
+  const res = await authed(`/api/chats/${chatId}/leave`, alice.token, { method: 'POST' });
+  assert.equal(((await res.json()) as any).chatDeleted, true);
+
+  // chat row + its messages are gone (cascade)
+  assert.ok(!ctx.db.prepare('SELECT 1 FROM chats WHERE id = ?').get(chatId), 'chat deleted');
+  assert.equal((ctx.db.prepare('SELECT COUNT(*) AS n FROM messages WHERE chat_id = ?').get(chatId) as any).n, 0);
+
+  wsA.close();
+  wsB.close();
+});
+
+test('delete group: admin only; members get chat.deleted; cascade wipes messages', async () => {
+  const alice = await registerUser(ctx, 'alice', 'Alice', 'password123');
+  const bob = await registerUser(ctx, 'bob', 'Bob', 'password123');
+  const carol = await registerUser(ctx, 'carol', 'Carol', 'password123');
+  const chatId = await createGroup(alice.token, 'Dev Team', [bob.user.id, carol.user.id]);
+
+  // seed one message so the cascade is observable
+  const wsA = await wsConnectAuthed(ctx.port, alice.token);
+  wsA.send(JSON.stringify({ t: 'msg.send', cid: chatId, tempId: 't1', kind: 'text', text: 'last words' }));
+  await waitForMessage(wsA, (m) => m.t === 'msg.ack');
+
+  // non-admin cannot delete
+  const forbidden = await authed(`/api/chats/${chatId}`, bob.token, { method: 'DELETE' });
+  assert.equal(forbidden.status, 403);
+
+  // members (bob, carol) receive chat.deleted
+  const wsB = await wsConnectAuthed(ctx.port, bob.token);
+  const wsC = await wsConnectAuthed(ctx.port, carol.token);
+  const delB = waitForMessage(wsB, (m) => m.t === 'chat.deleted' && m.cid === chatId);
+  const delC = waitForMessage(wsC, (m) => m.t === 'chat.deleted' && m.cid === chatId);
+
+  const res = await authed(`/api/chats/${chatId}`, alice.token, { method: 'DELETE' });
+  assert.equal(res.status, 200);
+  await delB;
+  await delC;
+
+  // gone for everyone: listChats, detail, messages; cascade wiped rows
+  for (const token of [alice.token, bob.token, carol.token]) {
+    const chats = (await (await authed('/api/chats', token)).json()) as any;
+    assert.ok(!chats.chats.some((c: any) => c.id === chatId), 'chat gone from list');
+    const detail = await authed(`/api/chats/${chatId}`, token);
+    assert.equal(detail.status, 404);
+  }
+  assert.equal((ctx.db.prepare('SELECT COUNT(*) AS n FROM messages WHERE chat_id = ?').get(chatId) as any).n, 0);
+  assert.equal((ctx.db.prepare('SELECT COUNT(*) AS n FROM chat_members WHERE chat_id = ?').get(chatId) as any).n, 0);
+
+  wsA.close();
+  wsB.close();
+  wsC.close();
+});

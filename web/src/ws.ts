@@ -110,6 +110,10 @@ class ChatSocket {
         store.removeChat(msg.cid);
         break;
 
+      case 'chat.deleted':
+        store.removeChat(msg.cid);
+        break;
+
       case 'error':
         console.warn('server ws error:', msg.code, msg.message);
         void import('./ui/toast').then(({ toast }) => toast(msg.message ?? 'Something went wrong', 'error'));
