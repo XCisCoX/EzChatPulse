@@ -8,7 +8,7 @@ export function mountLogin(onSuccess: () => void): void {
   root.innerHTML = `
     <div class="login-card">
       <div class="login-logo">◉</div>
-      <h1>ChatPulse</h1>
+      <h1>EzChatPulse</h1>
       <p class="login-sub">fast · private · yours</p>
       <div class="login-tabs">
         <button type="button" class="tab active" data-tab="login">Sign in</button>

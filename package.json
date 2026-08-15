@@ -1,5 +1,5 @@
 {
-  "name": "chatpulse",
+  "name": "ezchatpulse",
   "private": true,
   "version": "0.1.0",
   "description": "Self-hosted Telegram-style chat: WebSocket real-time, private + group chats, presence, persistent history, media sharing, TLS.",

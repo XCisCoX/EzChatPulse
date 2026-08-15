@@ -72,7 +72,7 @@ wss.on('connection', (ws: WebSocket) => handleConnection(ws));
 
 server.listen(config.port, config.host, () => {
   getDb(); // open the database at startup so failures surface immediately
-  console.log(`chatpulse server listening on https://${config.host}:${config.port}`);
+  console.log(`ezchatpulse server listening on https://${config.host}:${config.port}`);
   console.log(`  ws endpoint:   wss://localhost:${config.port}/ws`);
   console.log(`  health check:  https://localhost:${config.port}/api/health`);
 });

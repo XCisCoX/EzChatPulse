@@ -1,4 +1,4 @@
-# ChatPulse
+# EzChatPulse
 
 A self-hosted, Telegram-style chat application: real-time messaging over WebSocket,
 private + group chats, presence (online / last seen), persistent history, media

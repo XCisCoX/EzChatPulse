@@ -1,4 +1,4 @@
-# ChatPulse — Bug Tracker
+# EzChatPulse — Bug Tracker
 
 > Bug log only. Features/backlog live in **[ROADMAP.md](ROADMAP.md)**.
 > Private raw notes live in `bugs-n-stuff.txt` (offline — never committed or deployed).

@@ -1,4 +1,4 @@
-# ChatPulse — Roadmap
+# EzChatPulse — Roadmap
 
 > Feature backlog, parked ideas, and what's been shipped. Bug log lives in
 > **[BUGS.md](BUGS.md)**; private raw notes live in `bugs-n-stuff.txt` (offline).
@@ -39,8 +39,6 @@
 | 5 | Aug 9 | Reply-to-message (quote + jump), email capture (one-time, private DTO, migration v4), soft-delete retention (hidden rows + admin purge) | 68/68, 12/12 live |
 | 6 | Aug 15 | Delete confirmation, leave/delete group (member.left, last-member auto-delete, admin cascade + chat.deleted) | 71/71, 11/11 live |
 
-## Publishing
+## License
 
-GPL-3.0 (LICENSE). Repo is publish-ready: `data/`, `certs/`, keys, `.hermes/`,
-and `bugs-n-stuff.txt` are gitignored and excluded from deploys — nothing local
-or private is tracked.
+This project uses GPL-3.0 (LICENSE).
