@@ -20,6 +20,9 @@ certs/
 # local workspace artifacts (not part of the app)
 .hermes/
 
+# private offline scratchpad — never commit or deploy
+bugs-n-stuff.txt
+
 # logs
 *.log
 npm-debug.log*
