@@ -1,9 +1,10 @@
 # EzChatPulse — Bug Tracker
 
 > Bug log only. Features/backlog live in **[ROADMAP.md](ROADMAP.md)**.
-> Private raw notes live in `bugs-n-stuff.txt` (offline — never committed or deployed).
-> Legend: 🔴 open · 🟡 in progress · 🟢 fixed · ✅ verified · 💤 parked
-> Severity: 🔥 critical · ⚠️ major · 🔸 minor · ✨ polish
+>
+> **Status:** 🔴 open · 🟡 in progress · 🟢 fixed · ✅ verified · 💤 parked
+>
+> **Severity:** 🔥 critical (blocks use) · ⚠️ major (broken/wrong UX) · 🔸 minor (glitch) · ✨ polish
 
 ## Summary
 

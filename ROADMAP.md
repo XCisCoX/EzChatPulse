@@ -1,7 +1,7 @@
 # EzChatPulse — Roadmap
 
 > Feature backlog, parked ideas, and what's been shipped. Bug log lives in
-> **[BUGS.md](BUGS.md)**; private raw notes live in `bugs-n-stuff.txt` (offline).
+> **[BUGS.md](BUGS.md)**.
 > Legend: ✅ done · 🔜 next · 🟡 needs a decision · 💤 parked
 
 ## Active backlog (priority order)
