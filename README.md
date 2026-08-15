@@ -46,7 +46,7 @@ Config via env vars (defaults in parentheses):
 ## Test & perf tooling
 
 ```bash
-npm test                       # 49 integration tests (real HTTP + WS + in-memory DB)
+npm test                       # 71 integration tests (real HTTP + WS + in-memory DB)
 SEED_USERS=20 SEED_MESSAGES=100000 npm run seed     # backfill fake history
 LOAD_USERS=50 LOAD_MSGS=200 npm run loadtest        # 50 ws clients, 10k messages
 npm run smoke                  # full auth flow against the live server
@@ -95,13 +95,11 @@ Server → client: `ready`, `msg.ack {tempId, msg}`, `msg.new {msg}`,
 `chat.created {chat}`, `chat.member {cid, action, userId, chat?}`,
 `chat.removed {cid}`, `error {code, message}`.
 
-## Roadmap (natural next steps)
+## Roadmap
 
-- Message editing/deletion, delete-for-everyone
-- Channels, bots, message search, notifications
-- Horizontal scale: Redis pub/sub for fan-out, shared DB
-- Let's Encrypt or any real cert (replace `certs/` — no code change)
-- Server-side image thumbnails for large uploads
+See [ROADMAP.md](ROADMAP.md) — the active feature backlog, parked ideas, and
+what's already shipped (edit/delete, settings, admin panel, emoji panel,
+replies, soft-delete retention, groups management, and more).
 
 ## License
 

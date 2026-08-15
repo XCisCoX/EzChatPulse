@@ -23,6 +23,9 @@ certs/
 # private offline scratchpad — never commit or deploy
 bugs-n-stuff.txt
 
+# private ops docs (VPS IP, SSH key path, systemd commands) — never publish
+DEPLOY.md
+
 # logs
 *.log
 npm-debug.log*
