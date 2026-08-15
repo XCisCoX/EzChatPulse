@@ -102,3 +102,7 @@ Server → client: `ready`, `msg.ack {tempId, msg}`, `msg.new {msg}`,
 - Horizontal scale: Redis pub/sub for fan-out, shared DB
 - Let's Encrypt or any real cert (replace `certs/` — no code change)
 - Server-side image thumbnails for large uploads
+
+## License
+
+GPL-3.0 — see [LICENSE](LICENSE).

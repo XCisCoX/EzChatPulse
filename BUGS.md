@@ -13,14 +13,14 @@
 | CP-3 | Persian (RTL) messages render LTR | 🔸 minor | feature | ✅ verified | bubbles |
 | CP-4 | Esc should close the open chat | ✨ polish | suggestion | ✅ verified | keyboard |
 | CP-5 | Hard to find how to start a new chat | 🔸 minor | ux feedback | ✅ verified | sidebar |
-| CP-6 | Image pokes outside the bubble on phones | 🔸 minor | bug | 🟢 fixed | bubbles / css |
+| CP-6 | Image pokes outside the bubble on phones | 🔸 minor | bug | ✅ verified | bubbles / css |
 | CP-7 | Selected-chat highlight doesn't restore on chat switch | 🔸 minor | bug | ✅ verified | sidebar / css |
-| CP-8 | Narrow screens split the pane when no chat is open | 🔸 minor | bug | 🟢 fixed | layout / css |
+| CP-8 | Narrow screens split the pane when no chat is open | 🔸 minor | bug | ✅ verified | layout / css |
 | CP-9 | History loads newest-first on a fresh device (top msg = 26th, bottom = 1st) | ⚠️ major | bug | ✅ verified | history load |
 | CP-10 | Second tick (✓✓) missing during live chat (works after reload) | ⚠️ major | bug | ✅ verified | chat pane |
 | CP-11 | Sidebar header cramped — user name truncated (design: search top, profile bottom, + menu) | 🔸 minor | ux | ✅ verified | sidebar |
 | CP-12 | Persian filename uploaded as mojibake ('ØªÙ…') | 🔸 minor | bug | ✅ verified | uploads |
-| CP-13 | On phone, profile + button slip under Firefox's bottom search bar | 🔸 minor | bug | 🟢 fixed | layout / mobile |
+| CP-13 | On phone, profile + button slip under Firefox's bottom search bar | 🔸 minor | bug | ✅ verified | layout / mobile |
 | CP-14 | Clearing the sidebar search does nothing (results stay stuck) | 🔸 minor | bug | ✅ verified | sidebar search |
 | CP-15 | False unread: your own message shows as '1' after refresh | 🔸 minor | bug | ✅ verified | unread counts |
 | CP-16 | Edit/delete buttons misplaced (off-screen on phone, horizontal scrollbar on desktop hover) | 🔸 minor | bug | ✅ verified | message actions |
@@ -313,7 +313,41 @@ Tests updated to the hard-delete semantics (55/55 green).
 | ~~Admin panel~~ | ✅ DONE Aug 9 — see "Feature round 3" below (monitor + manage) |
 | ~~Emoji panel~~ | ✅ DONE Aug 9 — see "Feature round 4" below |
 | ~~Reply to messages~~ | ✅ DONE Aug 9 — see "Feature round 5" below |
-| Leave / delete group | leave = remove self + eviction events; delete = admin destroys chat |
+| ~~Leave / delete group~~ | ✅ DONE Aug 15 — see "Feature round 6" below |
+
+### Feature round 6 — Aug 15: delete confirmation, leave/delete group, git prep ✅
+
+Commit `b16705a`, 71/71 tests, 11/11 live two-browser checks passed.
+
+- **Delete confirmation:** both destructive delete actions now open a confirm
+  dialog first ("Delete for everyone? … cannot be undone" / "Delete for me?")
+  — Cancel keeps the message. Shared `confirmDialog()` helper (also used by the
+  group actions).
+- **Leave group:** members modal → "Leave group" (with confirm). Server route
+  `POST /api/chats/:id/leave`; remaining members get `chat.member {action:left}`
+  with the shrunk member list; the leaver's devices drop the chat
+  (`chat.removed`), and their access is revoked (403 on history). **Last member
+  leaving deletes the group** (with its messages, via cascade).
+- **Delete group:** admins only — `DELETE /api/chats/:id`; cascade wipes
+  messages/members/read state; every member's device drops it live via
+  `chat.deleted` (the pane closes if open). Non-admins get 403.
+- **Git prep (GPL publish):** `.gitignore` hardened (`*.pem`, `*.key`,
+  `.jwt-secret`, `.hermes/` untracked), `LICENSE` = GPL-3.0 (full text from
+  gnu.org), README license section. Audit: no secrets/local data tracked.
+- **Logged bugs swept:** CP-6 (image overflow), CP-8 (narrow-screen pane),
+  CP-13 (mobile dvh footer) — all three 🟢-fixed items verified live in a
+  390×844 mobile viewport and moved to ✅ (image fits pane, no horizontal
+  overflow, footer flush at the viewport bottom). CP-13's real-Firefox case
+  still warrants a phone check, but the mechanism is confirmed.
+
+### Backlog — Aug 15 additions (from bugs-n-stuff.txt)
+
+| Item | Notes |
+|------|-------|
+| GIF support "like Telegram" | GIF search (Tenor/Giphy API key) + quick-send UI |
+| Android app | separate project; cheapest first step = PWA wrapper |
+| Profile image + user info | click the chat header → user card (avatar, name, username); avatar upload reuses file infra |
+| ~~Leave / delete group~~ | ✅ DONE Aug 15 |
 
 ### Feature round 4 — Aug 9: emoji panel ✅
 
