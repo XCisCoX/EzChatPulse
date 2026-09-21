@@ -1,13 +1,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import https from 'node:https';
-import type { Request, Response, NextFunction } from 'express';
 import express from 'express';
-import multer from 'multer';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { config } from './config.js';
 import { getDb } from './db.js';
-import { AppError } from './errors.js';
+import { errorHandler } from './error-handler.js';
 import authRoutes from './api/auth_routes.js';
 import userRoutes from './api/user_routes.js';
 import chatRoutes from './api/chat_routes.js';
@@ -47,17 +45,8 @@ if (fs.existsSync(webDist)) {
   });
 }
 
-// Central error handler: AppError → JSON status, everything else → 500
-app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
-  if (err instanceof AppError) {
-    res.status(err.statusCode).json({ error: err.message });
-  } else if (err instanceof multer.MulterError) {
-    res.status(400).json({ error: err.message });
-  } else {
-    console.error('Unhandled error:', err);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
+// Central error handler: AppError → its status, client faults → 400, else 500
+app.use(errorHandler);
 
 const server = https.createServer(
   {

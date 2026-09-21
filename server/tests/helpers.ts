@@ -1,9 +1,8 @@
 import http from 'node:http';
 import express from 'express';
-import multer from 'multer';
 import { WebSocketServer, WebSocket as RawWebSocket } from 'ws';
 import { openDb, setTestDb, type Db } from '../src/db.js';
-import { AppError } from '../src/errors.js';
+import { errorHandler } from '../src/error-handler.js';
 import { resetRateLimits } from '../src/rate-limit.js';
 import authRoutes from '../src/api/auth_routes.js';
 import userRoutes from '../src/api/user_routes.js';
@@ -35,15 +34,8 @@ export function createTestContext(): Promise<TestContext> {
   app.use('/api', fileRoutes);
   app.use('/api/users', userRoutes);
   app.use('/api/admin', adminRoutes);
-  app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-    if (err instanceof AppError) {
-      res.status(err.statusCode).json({ error: err.message });
-    } else if (err instanceof multer.MulterError) {
-      res.status(400).json({ error: err.message });
-    } else {
-      console.error('Unhandled error:', err);
-      res.status(500).json({ error: 'Internal server error' });
-    }
+  app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
+    errorHandler(err, req, res, next);
   });
 
   const httpServer = http.createServer(app);

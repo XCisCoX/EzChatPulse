@@ -31,8 +31,9 @@
 | CP-19 | 'edited' label unreadable on colorful bubbles (too dark) | 🔹 cosmetic | bug | ✅ verified | message meta |
 | CP-20 | On phone, Enter sends instead of inserting a newline | 🔸 minor | bug | ✅ verified | composer / mobile |
 | CP-21 | Group sender-name gradient spans the bubble width, not the name | 🔹 cosmetic | bug | ✅ verified | group bubbles |
+| CP-22 | Malformed requests (scanner probes, bad JSON) return 500 + log spam | 🔸 minor | robustness | ✅ verified | error handling |
 
-**21/21 closed.** The next CP number to use: **CP-22**.
+**22/22 closed.** The next CP number to use: **CP-23**.
 
 ## Open issues
 
@@ -58,6 +59,7 @@ None right now. When reporting, copy this block:
 | UX round | Aug 9 | CP-16 context menu (right-click/tap, drag-safe), CP-17 no tombstone, CP-18 preview rollback, CP-19 edited-label contrast | 4/4 ✅ (`08a1f1e`) |
 | Friends round | Aug 9 | CP-20 mobile newline (coarse-pointer Enter), CP-21 sender-name gradient width | 2/2 ✅ (`b8f9b7a`) |
 | Sweep | Aug 15 | CP-6/CP-8/CP-13 🟢-fixed items verified live in a 390×844 mobile viewport → ✅ (CP-13 real-Firefox retest still welcome) | 3/3 ✅ |
+| Probe hardening | Sep 21 | CP-22 — malformed paths (internet scanners) and malformed JSON bodies returned 500 and spammed the journal; error handler extracted to a shared module and now maps client faults to 400 (no log noise, no stack leak) | ✅ (`server/src/error-handler.ts`, 8 tests) |
 
 Feature rounds (edit/delete, settings, admin, emoji, reply/email/soft-delete, confirmation + groups) are logged in ROADMAP.md.
 
