@@ -46,7 +46,7 @@ Config via env vars (defaults in parentheses):
 ## Test & perf tooling
 
 ```bash
-npm test                       # 71 integration tests (real HTTP + WS + in-memory DB)
+npm test                       # 79 integration tests (real HTTP + WS + in-memory DB)
 SEED_USERS=20 SEED_MESSAGES=100000 npm run seed     # backfill fake history
 LOAD_USERS=50 LOAD_MSGS=200 npm run loadtest        # 50 ws clients, 10k messages
 npm run smoke                  # full auth flow against the live server
